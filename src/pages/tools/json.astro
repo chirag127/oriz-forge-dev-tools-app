@@ -1,15 +1,61 @@
 ---
 import BaseLayout from '~/layouts/BaseLayout.astro'
 ---
-<BaseLayout title="JSON format / minify / diff / JSONPath — Oriz Dev Tools" description="JSON format / minify / diff / JSONPath — runs in your browser. Part of Oriz Dev Tools.">
+<BaseLayout title="JSON formatter / validator / diff — Oriz Dev Tools" description="JSON formatter, validator, minifier, and diff tool. Runs entirely in your browser.">
   <article class="tool">
     <p class="back mono"><a href="/">← all tools</a></p>
-    <h1 class="h1">JSON format / minify / diff / JSONPath</h1>
-    <p class="status mono ready">ready · v0</p>
-    <div class="placeholder">
-      <p>This tool is wired. Drop in your input or paste below — everything stays in your browser.</p>
-      <textarea class="io" placeholder="paste input here…" rows="8"></textarea>
-      <p class="hint mono">v0 = UI present + core path wired. Full feature set lands in v0.1.</p>
+    <h1 class="h1">JSON formatter / validator / diff</h1>
+    <p class="status mono ready">ready · v0.1</p>
+
+    <div class="tabs" role="tablist" aria-label="JSON tool modes">
+      <button class="tab active" role="tab" aria-selected="true" data-tab="format">Format / Validate</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="minify">Minify</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="diff">Diff</button>
+    </div>
+
+    <!-- Format / Validate -->
+    <div class="panel" id="panel-format">
+      <label class="label" for="json-input">JSON input</label>
+      <textarea id="json-input" class="io" rows="10" placeholder='{"name":"Alice","age":30}'></textarea>
+      <div class="actions">
+        <button class="btn" id="json-format-btn">Format (2 spaces)</button>
+        <button class="btn" id="json-validate-btn">Validate</button>
+        <button class="btn secondary" id="json-copy-btn">Copy output</button>
+      </div>
+      <div id="json-status" class="status-msg"></div>
+      <pre id="json-output" class="output" aria-live="polite"></pre>
+    </div>
+
+    <!-- Minify -->
+    <div class="panel hidden" id="panel-minify">
+      <label class="label" for="minify-input">JSON input</label>
+      <textarea id="minify-input" class="io" rows="10" placeholder='{ "name": "Alice", "age": 30 }'></textarea>
+      <div class="actions">
+        <button class="btn" id="minify-btn">Minify</button>
+        <button class="btn secondary" id="minify-copy-btn">Copy output</button>
+      </div>
+      <div id="minify-status" class="status-msg"></div>
+      <pre id="minify-output" class="output" aria-live="polite"></pre>
+    </div>
+
+    <!-- Diff -->
+    <div class="panel hidden" id="panel-diff">
+      <div class="two-col">
+        <div>
+          <label class="label" for="diff-left">JSON A (original)</label>
+          <textarea id="diff-left" class="io" rows="10" placeholder='{"a":1,"b":2}'></textarea>
+        </div>
+        <div>
+          <label class="label" for="diff-right">JSON B (modified)</label>
+          <textarea id="diff-right" class="io" rows="10" placeholder='{"a":1,"b":3,"c":4}'></textarea>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="diff-btn">Compare</button>
+        <button class="btn secondary" id="diff-copy-btn">Copy diff</button>
+      </div>
+      <div id="diff-status" class="status-msg"></div>
+      <pre id="diff-output" class="output diff-view" aria-live="polite"></pre>
     </div>
   </article>
 </BaseLayout>
@@ -22,18 +68,182 @@ import BaseLayout from '~/layouts/BaseLayout.astro'
   .h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.75rem, 4vw, 2.5rem); margin: 0 0 0.5rem; line-height: 1.1; }
   .status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 2rem; }
   .status.ready { color: var(--accent); }
-  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 56ch; }
-  .placeholder { max-width: 60ch; }
-  .placeholder p { color: var(--muted); margin: 0 0 1rem; }
+  .label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 0.4rem; letter-spacing: 0.05em; }
   .io {
     width: 100%;
-    padding: 1rem;
+    padding: 0.875rem 1rem;
     background: var(--paper-2);
     border: 1px solid var(--rule);
     color: var(--ink);
     font-family: var(--font-mono);
     font-size: 0.875rem;
     resize: vertical;
+    outline: none;
   }
-  .hint { font-size: 11px; color: var(--muted); margin-top: 0.75rem; }
+  .io:focus { border-color: var(--accent); }
+  .output {
+    width: 100%;
+    padding: 0.875rem 1rem;
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+    min-height: 3rem;
+    margin: 0;
+    overflow-x: auto;
+  }
+  .tabs { display: flex; gap: 2px; margin-bottom: 1.5rem; border-bottom: 1px solid var(--rule); }
+  .tab {
+    padding: 0.5rem 1rem;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    cursor: pointer;
+    margin-bottom: -1px;
+  }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab:hover:not(.active) { color: var(--ink); }
+  .panel { margin-bottom: 1.5rem; }
+  .hidden { display: none; }
+  .actions { display: flex; gap: 0.5rem; margin: 0.75rem 0; flex-wrap: wrap; }
+  .btn {
+    padding: 0.4rem 1rem;
+    background: var(--accent);
+    color: var(--paper);
+    border: none;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    letter-spacing: 0.03em;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn.secondary { background: var(--paper-2); color: var(--ink); border: 1px solid var(--rule); }
+  .status-msg { font-family: var(--font-mono); font-size: 0.8125rem; min-height: 1.4rem; margin-bottom: 0.5rem; }
+  .status-msg.ok { color: #4ade80; }
+  .status-msg.err { color: #f87171; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 0; }
+  @media (max-width: 640px) { .two-col { grid-template-columns: 1fr; } }
+  .diff-view .add { color: #4ade80; }
+  .diff-view .del { color: #f87171; }
+  .diff-view .same { color: var(--muted); }
 </style>
+
+<script>
+  // Tab switching
+  document.querySelectorAll<HTMLButtonElement>('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => { t.classList.remove('active'); (t as HTMLButtonElement).setAttribute('aria-selected', 'false'); });
+      document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
+      tab.classList.add('active');
+      tab.setAttribute('aria-selected', 'true');
+      const panel = document.getElementById(`panel-${tab.dataset.tab}`);
+      panel?.classList.remove('hidden');
+    });
+  });
+
+  function setStatus(el: HTMLElement, msg: string, ok: boolean) {
+    el.textContent = msg;
+    el.className = 'status-msg ' + (ok ? 'ok' : 'err');
+  }
+
+  function tryParse(s: string): [object | null, string] {
+    try { return [JSON.parse(s), '']; }
+    catch (e: unknown) { return [null, (e as Error).message]; }
+  }
+
+  // Format / Validate
+  const jsonInput = document.getElementById('json-input') as HTMLTextAreaElement;
+  const jsonOutput = document.getElementById('json-output') as HTMLPreElement;
+  const jsonStatus = document.getElementById('json-status') as HTMLElement;
+
+  document.getElementById('json-format-btn')!.addEventListener('click', () => {
+    const [parsed, err] = tryParse(jsonInput.value.trim());
+    if (parsed === null) { setStatus(jsonStatus, '✗ ' + err, false); jsonOutput.textContent = ''; return; }
+    jsonOutput.textContent = JSON.stringify(parsed, null, 2);
+    setStatus(jsonStatus, '✓ valid JSON', true);
+  });
+
+  document.getElementById('json-validate-btn')!.addEventListener('click', () => {
+    const [, err] = tryParse(jsonInput.value.trim());
+    if (err) { setStatus(jsonStatus, '✗ ' + err, false); return; }
+    setStatus(jsonStatus, '✓ valid JSON', true);
+  });
+
+  document.getElementById('json-copy-btn')!.addEventListener('click', () => {
+    if (jsonOutput.textContent) navigator.clipboard.writeText(jsonOutput.textContent);
+  });
+
+  // Minify
+  const minifyInput = document.getElementById('minify-input') as HTMLTextAreaElement;
+  const minifyOutput = document.getElementById('minify-output') as HTMLPreElement;
+  const minifyStatus = document.getElementById('minify-status') as HTMLElement;
+
+  document.getElementById('minify-btn')!.addEventListener('click', () => {
+    const [parsed, err] = tryParse(minifyInput.value.trim());
+    if (parsed === null) { setStatus(minifyStatus, '✗ ' + err, false); minifyOutput.textContent = ''; return; }
+    minifyOutput.textContent = JSON.stringify(parsed);
+    setStatus(minifyStatus, '✓ minified', true);
+  });
+
+  document.getElementById('minify-copy-btn')!.addEventListener('click', () => {
+    if (minifyOutput.textContent) navigator.clipboard.writeText(minifyOutput.textContent);
+  });
+
+  // Diff
+  const diffLeft = document.getElementById('diff-left') as HTMLTextAreaElement;
+  const diffRight = document.getElementById('diff-right') as HTMLTextAreaElement;
+  const diffOutput = document.getElementById('diff-output') as HTMLPreElement;
+  const diffStatus = document.getElementById('diff-status') as HTMLElement;
+
+  function flattenJSON(obj: unknown, prefix = ''): Record<string, string> {
+    const result: Record<string, string> = {};
+    function walk(o: unknown, p: string) {
+      if (o !== null && typeof o === 'object' && !Array.isArray(o)) {
+        for (const [k, v] of Object.entries(o as Record<string, unknown>)) walk(v, p ? `${p}.${k}` : k);
+      } else if (Array.isArray(o)) {
+        (o as unknown[]).forEach((v, i) => walk(v, `${p}[${i}]`));
+      } else {
+        result[p] = JSON.stringify(o);
+      }
+    }
+    walk(obj, prefix);
+    return result;
+  }
+
+  document.getElementById('diff-btn')!.addEventListener('click', () => {
+    const [a, errA] = tryParse(diffLeft.value.trim());
+    const [b, errB] = tryParse(diffRight.value.trim());
+    if (!a) { setStatus(diffStatus, '✗ A: ' + errA, false); return; }
+    if (!b) { setStatus(diffStatus, '✗ B: ' + errB, false); return; }
+    const fa = flattenJSON(a);
+    const fb = flattenJSON(b);
+    const keys = new Set([...Object.keys(fa), ...Object.keys(fb)]);
+    let html = '';
+    for (const k of [...keys].sort()) {
+      if (!(k in fa)) html += `<span class="add">+ ${k}: ${fb[k]}</span>\n`;
+      else if (!(k in fb)) html += `<span class="del">- ${k}: ${fa[k]}</span>\n`;
+      else if (fa[k] !== fb[k]) {
+        html += `<span class="del">- ${k}: ${fa[k]}</span>\n`;
+        html += `<span class="add">+ ${k}: ${fb[k]}</span>\n`;
+      } else {
+        html += `<span class="same">  ${k}: ${fa[k]}</span>\n`;
+      }
+    }
+    diffOutput.innerHTML = html || '<span class="ok">No differences found</span>';
+    const added = [...keys].filter(k => !(k in fa)).length;
+    const removed = [...keys].filter(k => !(k in fb)).length;
+    const changed = [...keys].filter(k => k in fa && k in fb && fa[k] !== fb[k]).length;
+    setStatus(diffStatus, `+${added} added  -${removed} removed  ~${changed} changed`, true);
+  });
+
+  document.getElementById('diff-copy-btn')!.addEventListener('click', () => {
+    if (diffOutput.textContent) navigator.clipboard.writeText(diffOutput.textContent);
+  });
+</script>

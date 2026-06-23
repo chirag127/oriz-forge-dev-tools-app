@@ -1,0 +1,186 @@
+---
+import BaseLayout from '~/layouts/BaseLayout.astro'
+---
+<BaseLayout title="Color picker / converter — Oriz Dev Tools" description="Convert colors between HEX, RGB, and HSL. Includes a visual color picker. Runs in your browser.">
+  <article class="tool">
+    <p class="back mono"><a href="/">← all tools</a></p>
+    <h1 class="h1">Color picker / converter</h1>
+    <p class="status mono ready">ready · v0.1</p>
+
+    <div class="picker-row">
+      <div class="swatch-wrap">
+        <input type="color" id="color-picker" class="color-picker" value="#38bdf8" />
+        <div id="color-swatch" class="color-swatch" style="background:#38bdf8"></div>
+      </div>
+      <div class="fields">
+        <div class="field">
+          <label class="label" for="hex-input">HEX</label>
+          <div class="input-row">
+            <input id="hex-input" class="io-line" type="text" value="#38bdf8" maxlength="9" spellcheck="false" />
+            <button class="copy-btn" data-val="hex-input">copy</button>
+          </div>
+        </div>
+        <div class="field">
+          <label class="label" for="rgb-input">RGB</label>
+          <div class="input-row">
+            <input id="rgb-input" class="io-line" type="text" value="rgb(56, 189, 248)" spellcheck="false" />
+            <button class="copy-btn" data-val="rgb-input">copy</button>
+          </div>
+        </div>
+        <div class="field">
+          <label class="label" for="hsl-input">HSL</label>
+          <div class="input-row">
+            <input id="hsl-input" class="io-line" type="text" value="hsl(199, 92%, 60%)" spellcheck="false" />
+            <button class="copy-btn" data-val="hsl-input">copy</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="color-status" class="status-msg"></div>
+
+    <div class="info-grid">
+      <div class="info-item"><span class="info-key mono">Luminance</span><span id="info-luminance" class="info-val mono">-</span></div>
+      <div class="info-item"><span class="info-key mono">CSS var</span><span id="info-css" class="info-val mono">-</span></div>
+    </div>
+  </article>
+</BaseLayout>
+
+<style>
+  .tool { padding-block: 0 2rem; }
+  .back { font-size: 12px; margin: 0 0 2rem; }
+  .back a { color: var(--muted); text-decoration: none; }
+  .back a:hover { color: var(--ink); }
+  .h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.75rem, 4vw, 2.5rem); margin: 0 0 0.5rem; line-height: 1.1; }
+  .status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 2rem; }
+  .status.ready { color: var(--accent); }
+  .label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 0.4rem; letter-spacing: 0.05em; }
+  .picker-row { display: flex; gap: 1.5rem; align-items: flex-start; flex-wrap: wrap; }
+  .swatch-wrap { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+  .color-picker { width: 80px; height: 80px; border: none; padding: 0; cursor: pointer; background: none; }
+  .color-swatch { width: 80px; height: 80px; border: 1px solid var(--rule); border-radius: 2px; }
+  .fields { flex: 1; min-width: 240px; display: flex; flex-direction: column; gap: 0.75rem; }
+  .field { display: flex; flex-direction: column; }
+  .input-row { display: flex; gap: 0.5rem; align-items: center; }
+  .io-line {
+    flex: 1;
+    padding: 0.6rem 0.75rem;
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.9375rem;
+    outline: none;
+  }
+  .io-line:focus { border-color: var(--accent); }
+  .copy-btn { background: none; border: 1px solid var(--rule); color: var(--muted); font-family: var(--font-mono); font-size: 11px; padding: 0.35rem 0.65rem; cursor: pointer; white-space: nowrap; }
+  .copy-btn:hover { color: var(--ink); }
+  .status-msg { font-family: var(--font-mono); font-size: 0.8125rem; min-height: 1.4rem; margin-top: 0.75rem; }
+  .status-msg.ok { color: #4ade80; }
+  .status-msg.err { color: #f87171; }
+  .info-grid { display: flex; gap: 1.5rem; margin-top: 1rem; flex-wrap: wrap; }
+  .info-item { display: flex; flex-direction: column; gap: 0.2rem; }
+  .info-key { font-size: 11px; color: var(--muted); letter-spacing: 0.05em; }
+  .info-val { font-size: 0.875rem; color: var(--ink); }
+</style>
+
+<script>
+  function hexToRgb(hex: string): [number,number,number] | null {
+    const m = hex.replace('#','').match(/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+    if (!m) return null;
+    return [parseInt(m[1],16), parseInt(m[2],16), parseInt(m[3],16)];
+  }
+  function hexToRgbShort(hex: string): [number,number,number] | null {
+    const m = hex.replace('#','').match(/^([0-9a-f])([0-9a-f])([0-9a-f])$/i);
+    if (!m) return null;
+    return [parseInt(m[1]+m[1],16), parseInt(m[2]+m[2],16), parseInt(m[3]+m[3],16)];
+  }
+  function rgbToHex(r: number, g: number, b: number): string {
+    return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
+  }
+  function rgbToHsl(r: number, g: number, b: number): [number,number,number] {
+    const r1=r/255, g1=g/255, b1=b/255;
+    const max=Math.max(r1,g1,b1), min=Math.min(r1,g1,b1);
+    let h=0, s=0;
+    const l=(max+min)/2;
+    if (max!==min) {
+      const d=max-min;
+      s=l>0.5 ? d/(2-max-min) : d/(max+min);
+      if (max===r1) h=(g1-b1)/d+(g1<b1?6:0);
+      else if (max===g1) h=(b1-r1)/d+2;
+      else h=(r1-g1)/d+4;
+      h/=6;
+    }
+    return [Math.round(h*360), Math.round(s*100), Math.round(l*100)];
+  }
+  function hslToRgb(h: number, s: number, l: number): [number,number,number] {
+    const s1=s/100, l1=l/100;
+    const k = (n: number) => (n+h/30)%12;
+    const a = s1*Math.min(l1,1-l1);
+    const f = (n: number) => l1-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));
+    return [Math.round(f(0)*255), Math.round(f(8)*255), Math.round(f(4)*255)];
+  }
+  function luminance(r: number, g: number, b: number): string {
+    const lin = (c: number) => { const v=c/255; return v<=0.04045 ? v/12.92 : Math.pow((v+0.055)/1.055,2.4); };
+    const L = 0.2126*lin(r)+0.7152*lin(g)+0.0722*lin(b);
+    return L.toFixed(4);
+  }
+
+  const picker = document.getElementById('color-picker') as HTMLInputElement;
+  const swatchEl = document.getElementById('color-swatch') as HTMLElement;
+  const hexEl = document.getElementById('hex-input') as HTMLInputElement;
+  const rgbEl = document.getElementById('rgb-input') as HTMLInputElement;
+  const hslEl = document.getElementById('hsl-input') as HTMLInputElement;
+  const statusEl = document.getElementById('color-status') as HTMLElement;
+  const lumEl = document.getElementById('info-luminance') as HTMLElement;
+  const cssEl = document.getElementById('info-css') as HTMLElement;
+
+  function updateFromRgb(r: number, g: number, b: number) {
+    const hex = rgbToHex(r,g,b);
+    const [h,s,l] = rgbToHsl(r,g,b);
+    hexEl.value = hex;
+    rgbEl.value = `rgb(${r}, ${g}, ${b})`;
+    hslEl.value = `hsl(${h}, ${s}%, ${l}%)`;
+    picker.value = hex;
+    swatchEl.style.background = hex;
+    lumEl.textContent = luminance(r,g,b);
+    cssEl.textContent = `color: ${hex};`;
+    statusEl.className = 'status-msg ok';
+    statusEl.textContent = '✓ ' + hex;
+  }
+
+  picker.addEventListener('input', () => {
+    const rgb = hexToRgb(picker.value);
+    if (rgb) updateFromRgb(...rgb);
+  });
+
+  hexEl.addEventListener('change', () => {
+    const v = hexEl.value.trim();
+    const rgb = hexToRgb(v) ?? hexToRgbShort(v);
+    if (!rgb) { statusEl.className='status-msg err'; statusEl.textContent='✗ invalid hex'; return; }
+    updateFromRgb(...rgb);
+  });
+
+  rgbEl.addEventListener('change', () => {
+    const m = rgbEl.value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    if (!m) { statusEl.className='status-msg err'; statusEl.textContent='✗ invalid rgb — use rgb(r, g, b)'; return; }
+    updateFromRgb(+m[1],+m[2],+m[3]);
+  });
+
+  hslEl.addEventListener('change', () => {
+    const m = hslEl.value.match(/hsla?\((\d+),\s*(\d+)%?,\s*(\d+)%?/);
+    if (!m) { statusEl.className='status-msg err'; statusEl.textContent='✗ invalid hsl — use hsl(h, s%, l%)'; return; }
+    updateFromRgb(...hslToRgb(+m[1],+m[2],+m[3]));
+  });
+
+  document.querySelectorAll<HTMLButtonElement>('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const src = document.getElementById(btn.dataset.val!) as HTMLInputElement;
+      navigator.clipboard.writeText(src.value);
+      btn.textContent = 'copied!';
+      setTimeout(() => { btn.textContent = 'copy'; }, 1500);
+    });
+  });
+
+  // Init
+  updateFromRgb(56, 189, 248);
+</script>

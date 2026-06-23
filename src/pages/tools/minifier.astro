@@ -1,0 +1,216 @@
+---
+import BaseLayout from '~/layouts/BaseLayout.astro'
+---
+<BaseLayout title="Minifier / Beautifier — Oriz Dev Tools" description="Minify or beautify JSON, CSS, and HTML. Runs entirely in your browser.">
+  <article class="tool">
+    <p class="back mono"><a href="/">← all tools</a></p>
+    <h1 class="h1">Minifier / Beautifier</h1>
+    <p class="status mono ready">ready · v0.1</p>
+
+    <div class="tabs" role="tablist">
+      <button class="tab active" role="tab" data-tab="json">JSON</button>
+      <button class="tab" role="tab" data-tab="css">CSS</button>
+      <button class="tab" role="tab" data-tab="html-min">HTML</button>
+    </div>
+
+    <!-- JSON -->
+    <div class="panel" id="panel-json">
+      <label class="label" for="json-mb-input">JSON input</label>
+      <textarea id="json-mb-input" class="io" rows="10" placeholder='{"name":"Alice","scores":[1,2,3]}'></textarea>
+      <div class="actions">
+        <button class="btn" id="json-beautify-btn">Beautify</button>
+        <button class="btn" id="json-minify2-btn">Minify</button>
+        <button class="btn secondary" id="json-mb-copy-btn">Copy output</button>
+      </div>
+      <div id="json-mb-status" class="status-msg"></div>
+      <pre id="json-mb-output" class="output"></pre>
+    </div>
+
+    <!-- CSS -->
+    <div class="panel hidden" id="panel-css">
+      <label class="label" for="css-input">CSS input</label>
+      <textarea id="css-input" class="io" rows="10" placeholder=".foo { color: red; margin: 0; } .bar { display: flex; gap: 1rem; }"></textarea>
+      <div class="actions">
+        <button class="btn" id="css-beautify-btn">Beautify</button>
+        <button class="btn" id="css-minify-btn">Minify</button>
+        <button class="btn secondary" id="css-copy-btn">Copy output</button>
+      </div>
+      <div id="css-status" class="status-msg"></div>
+      <pre id="css-output" class="output"></pre>
+    </div>
+
+    <!-- HTML -->
+    <div class="panel hidden" id="panel-html-min">
+      <label class="label" for="html-mb-input">HTML input</label>
+      <textarea id="html-mb-input" class="io" rows="10" placeholder="<div>   <p>  Hello   world  </p>   </div>"></textarea>
+      <div class="actions">
+        <button class="btn" id="html-beautify-btn">Beautify</button>
+        <button class="btn" id="html-minify-btn">Minify</button>
+        <button class="btn secondary" id="html-mb-copy-btn">Copy output</button>
+      </div>
+      <div id="html-mb-status" class="status-msg"></div>
+      <pre id="html-mb-output" class="output"></pre>
+    </div>
+  </article>
+</BaseLayout>
+
+<style>
+  .tool { padding-block: 0 2rem; }
+  .back { font-size: 12px; margin: 0 0 2rem; }
+  .back a { color: var(--muted); text-decoration: none; }
+  .back a:hover { color: var(--ink); }
+  .h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.75rem, 4vw, 2.5rem); margin: 0 0 0.5rem; line-height: 1.1; }
+  .status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 2rem; }
+  .status.ready { color: var(--accent); }
+  .label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 0.4rem; letter-spacing: 0.05em; }
+  .io { width: 100%; padding: 0.875rem 1rem; background: var(--paper-2); border: 1px solid var(--rule); color: var(--ink); font-family: var(--font-mono); font-size: 0.875rem; resize: vertical; outline: none; }
+  .io:focus { border-color: var(--accent); }
+  .output { width: 100%; padding: 0.875rem 1rem; background: var(--paper-2); border: 1px solid var(--rule); color: var(--ink); font-family: var(--font-mono); font-size: 0.875rem; white-space: pre-wrap; word-break: break-all; min-height: 3rem; margin: 0; overflow-x: auto; }
+  .tabs { display: flex; gap: 2px; margin-bottom: 1.5rem; border-bottom: 1px solid var(--rule); }
+  .tab { padding: 0.5rem 1rem; background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); font-family: var(--font-mono); font-size: 0.875rem; cursor: pointer; margin-bottom: -1px; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab:hover:not(.active) { color: var(--ink); }
+  .panel { margin-bottom: 1.5rem; }
+  .hidden { display: none; }
+  .actions { display: flex; gap: 0.5rem; margin: 0.75rem 0; flex-wrap: wrap; }
+  .btn { padding: 0.4rem 1rem; background: var(--accent); color: var(--paper); border: none; font-family: var(--font-mono); font-size: 0.8125rem; font-weight: 600; cursor: pointer; }
+  .btn:hover { opacity: 0.85; }
+  .btn.secondary { background: var(--paper-2); color: var(--ink); border: 1px solid var(--rule); }
+  .status-msg { font-family: var(--font-mono); font-size: 0.8125rem; min-height: 1.4rem; margin-bottom: 0.5rem; }
+  .status-msg.ok { color: #4ade80; }
+  .status-msg.err { color: #f87171; }
+</style>
+
+<script>
+  // Tabs
+  document.querySelectorAll<HTMLButtonElement>('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
+      tab.classList.add('active');
+      document.getElementById(`panel-${tab.dataset.tab}`)?.classList.remove('hidden');
+    });
+  });
+
+  function setStatus(id: string, msg: string, ok: boolean) {
+    const el = document.getElementById(id)!;
+    el.textContent = msg;
+    el.className = 'status-msg ' + (ok ? 'ok' : 'err');
+  }
+
+  // ===== JSON =====
+  const jsonIn = document.getElementById('json-mb-input') as HTMLTextAreaElement;
+  const jsonOut = document.getElementById('json-mb-output') as HTMLPreElement;
+
+  document.getElementById('json-beautify-btn')!.addEventListener('click', () => {
+    try {
+      const parsed = JSON.parse(jsonIn.value.trim());
+      jsonOut.textContent = JSON.stringify(parsed, null, 2);
+      setStatus('json-mb-status', '✓ beautified', true);
+    } catch(e: unknown) {
+      setStatus('json-mb-status', '✗ ' + (e as Error).message, false);
+    }
+  });
+  document.getElementById('json-minify2-btn')!.addEventListener('click', () => {
+    try {
+      const parsed = JSON.parse(jsonIn.value.trim());
+      jsonOut.textContent = JSON.stringify(parsed);
+      setStatus('json-mb-status', `✓ minified · ${jsonOut.textContent.length} chars`, true);
+    } catch(e: unknown) {
+      setStatus('json-mb-status', '✗ ' + (e as Error).message, false);
+    }
+  });
+  document.getElementById('json-mb-copy-btn')!.addEventListener('click', () => {
+    if (jsonOut.textContent) navigator.clipboard.writeText(jsonOut.textContent);
+  });
+
+  // ===== CSS =====
+  const cssIn = document.getElementById('css-input') as HTMLTextAreaElement;
+  const cssOut = document.getElementById('css-output') as HTMLPreElement;
+
+  function beautifyCSS(css: string): string {
+    // Remove extra whitespace, then format rule-by-rule
+    let out = '';
+    let depth = 0;
+    const tokens = css.replace(/\s*\{\s*/g, ' {\n').replace(/\s*;\s*/g, ';\n').replace(/\s*\}\s*/g, '\n}\n').split('\n');
+    for (const tok of tokens) {
+      const t = tok.trim();
+      if (!t) continue;
+      if (t === '}') { depth--; out += '  '.repeat(Math.max(0,depth)) + '}\n\n'; }
+      else if (t.endsWith('{')) { out += '  '.repeat(depth) + t + '\n'; depth++; }
+      else { out += '  '.repeat(depth) + t + '\n'; }
+    }
+    return out.trim();
+  }
+
+  function minifyCSS(css: string): string {
+    return css
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\s+/g, ' ')
+      .replace(/\s*\{\s*/g, '{')
+      .replace(/\s*\}\s*/g, '}')
+      .replace(/\s*:\s*/g, ':')
+      .replace(/\s*;\s*/g, ';')
+      .replace(/;}/g, '}')
+      .trim();
+  }
+
+  document.getElementById('css-beautify-btn')!.addEventListener('click', () => {
+    cssOut.textContent = beautifyCSS(cssIn.value);
+    setStatus('css-status', '✓ beautified', true);
+  });
+  document.getElementById('css-minify-btn')!.addEventListener('click', () => {
+    const minified = minifyCSS(cssIn.value);
+    cssOut.textContent = minified;
+    setStatus('css-status', `✓ minified · ${minified.length} chars`, true);
+  });
+  document.getElementById('css-copy-btn')!.addEventListener('click', () => {
+    if (cssOut.textContent) navigator.clipboard.writeText(cssOut.textContent);
+  });
+
+  // ===== HTML =====
+  const htmlIn = document.getElementById('html-mb-input') as HTMLTextAreaElement;
+  const htmlOut = document.getElementById('html-mb-output') as HTMLPreElement;
+
+  function beautifyHTML(html: string): string {
+    let depth = 0;
+    const voidTags = new Set(['area','base','br','col','embed','hr','img','input','link','meta','param','source','track','wbr']);
+    const result: string[] = [];
+    const tokenRx = /(<[^>]+>|[^<]+)/g;
+    let m: RegExpExecArray | null;
+    while ((m = tokenRx.exec(html)) !== null) {
+      const tok = m[1].trim();
+      if (!tok) continue;
+      if (tok.startsWith('</')) { depth--; result.push('  '.repeat(Math.max(0,depth)) + tok); }
+      else if (tok.startsWith('<') && !tok.startsWith('<!--') && !tok.startsWith('<!')) {
+        const tag = (tok.match(/^<(\w+)/) ?? [])[1]?.toLowerCase();
+        result.push('  '.repeat(depth) + tok);
+        if (tag && !voidTags.has(tag) && !tok.endsWith('/>')) depth++;
+      } else {
+        result.push('  '.repeat(depth) + tok);
+      }
+    }
+    return result.join('\n');
+  }
+
+  function minifyHTML(html: string): string {
+    return html
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/>\s+</g, '><')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  document.getElementById('html-beautify-btn')!.addEventListener('click', () => {
+    htmlOut.textContent = beautifyHTML(htmlIn.value);
+    setStatus('html-mb-status', '✓ beautified', true);
+  });
+  document.getElementById('html-minify-btn')!.addEventListener('click', () => {
+    const minified = minifyHTML(htmlIn.value);
+    htmlOut.textContent = minified;
+    setStatus('html-mb-status', `✓ minified · ${minified.length} chars`, true);
+  });
+  document.getElementById('html-mb-copy-btn')!.addEventListener('click', () => {
+    if (htmlOut.textContent) navigator.clipboard.writeText(htmlOut.textContent);
+  });
+</script>

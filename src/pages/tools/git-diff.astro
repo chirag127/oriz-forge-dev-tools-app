@@ -1,0 +1,135 @@
+---
+import BaseLayout from '~/layouts/BaseLayout.astro'
+---
+<BaseLayout title="Git diff viewer — Oriz Dev Tools" description="Paste a git diff and see it color-coded. Runs entirely in your browser.">
+  <article class="tool">
+    <p class="back mono"><a href="/">← all tools</a></p>
+    <h1 class="h1">Git diff viewer</h1>
+    <p class="status mono ready">ready · v0.1</p>
+
+    <label class="label" for="diff-input">Paste git diff output</label>
+    <textarea id="diff-input" class="io" rows="14" placeholder="diff --git a/src/index.ts b/src/index.ts&#10;index 1234567..abcdef0 100644&#10;--- a/src/index.ts&#10;+++ b/src/index.ts&#10;@@ -1,5 +1,6 @@&#10; import something&#10;-const old = true&#10;+const new = false&#10;+const added = 'line'&#10; export default new"></textarea>
+    <div class="actions">
+      <button class="btn" id="diff-render-btn">Render diff</button>
+      <button class="btn secondary" id="diff-clear-btn">Clear</button>
+    </div>
+    <div id="diff-status" class="status-msg"></div>
+    <div id="diff-view" class="diff-view" aria-live="polite"></div>
+  </article>
+</BaseLayout>
+
+<style>
+  .tool { padding-block: 0 2rem; }
+  .back { font-size: 12px; margin: 0 0 2rem; }
+  .back a { color: var(--muted); text-decoration: none; }
+  .back a:hover { color: var(--ink); }
+  .h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.75rem, 4vw, 2.5rem); margin: 0 0 0.5rem; line-height: 1.1; }
+  .status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 2rem; }
+  .status.ready { color: var(--accent); }
+  .label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 0.4rem; letter-spacing: 0.05em; }
+  .io {
+    width: 100%;
+    padding: 0.875rem 1rem;
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    resize: vertical;
+    outline: none;
+  }
+  .io:focus { border-color: var(--accent); }
+  .actions { display: flex; gap: 0.5rem; margin: 0.75rem 0; }
+  .btn { padding: 0.4rem 1rem; background: var(--accent); color: var(--paper); border: none; font-family: var(--font-mono); font-size: 0.8125rem; font-weight: 600; cursor: pointer; }
+  .btn:hover { opacity: 0.85; }
+  .btn.secondary { background: var(--paper-2); color: var(--ink); border: 1px solid var(--rule); }
+  .status-msg { font-family: var(--font-mono); font-size: 0.8125rem; min-height: 1.4rem; margin-bottom: 0.5rem; }
+  .status-msg.ok { color: #4ade80; }
+  .status-msg.err { color: #f87171; }
+  .diff-view { border: 1px solid var(--rule); font-family: var(--font-mono); font-size: 0.8125rem; overflow-x: auto; }
+  .diff-file { border-bottom: 2px solid var(--rule); }
+  .diff-file:last-child { border-bottom: none; }
+  .diff-file-header { padding: 0.5rem 1rem; background: #1e293b; color: var(--accent); font-weight: 600; border-bottom: 1px solid var(--rule); }
+  .diff-hunk-header { padding: 0.3rem 1rem; background: rgba(56,189,248,0.07); color: #7dd3fc; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+  .diff-line { display: flex; }
+  .diff-line-num { min-width: 3rem; padding: 0.1rem 0.5rem; color: var(--muted); text-align: right; user-select: none; border-right: 1px solid var(--rule); flex-shrink: 0; font-size: 11px; line-height: 1.7; }
+  .diff-line-content { padding: 0.1rem 0.75rem; white-space: pre; flex: 1; line-height: 1.7; }
+  .line-add { background: rgba(74, 222, 128, 0.1); }
+  .line-add .diff-line-content { color: #4ade80; }
+  .line-add .diff-line-num { background: rgba(74, 222, 128, 0.05); }
+  .line-del { background: rgba(248, 113, 113, 0.1); }
+  .line-del .diff-line-content { color: #f87171; }
+  .line-del .diff-line-num { background: rgba(248, 113, 113, 0.05); }
+  .line-hdr { background: rgba(56,189,248,0.05); }
+  .line-hdr .diff-line-content { color: #7dd3fc; }
+  .line-ctx .diff-line-content { color: var(--muted); }
+</style>
+
+<script>
+  function escape(s: string) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  const inputEl = document.getElementById('diff-input') as HTMLTextAreaElement;
+  const viewEl = document.getElementById('diff-view') as HTMLDivElement;
+  const statusEl = document.getElementById('diff-status') as HTMLElement;
+
+  document.getElementById('diff-render-btn')!.addEventListener('click', render);
+  document.getElementById('diff-clear-btn')!.addEventListener('click', () => {
+    inputEl.value = '';
+    viewEl.innerHTML = '';
+    statusEl.textContent = '';
+  });
+
+  function render() {
+    const text = inputEl.value;
+    if (!text.trim()) {
+      statusEl.className = 'status-msg err';
+      statusEl.textContent = '✗ paste a git diff first';
+      viewEl.innerHTML = '';
+      return;
+    }
+
+    const lines = text.split('\n');
+    let html = '';
+    let inFile = false;
+    let addCount = 0, delCount = 0;
+    let leftLine = 0, rightLine = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      if (line.startsWith('diff --git')) {
+        if (inFile) html += '</div>';
+        html += `<div class="diff-file"><div class="diff-file-header">${escape(line)}</div>`;
+        inFile = true;
+        continue;
+      }
+      if (line.startsWith('--- ') || line.startsWith('+++ ') || line.startsWith('index ') || line.startsWith('new file') || line.startsWith('deleted file') || line.startsWith('Binary files')) {
+        html += `<div class="diff-line line-hdr"><span class="diff-line-num"></span><span class="diff-line-content">${escape(line)}</span></div>`;
+        continue;
+      }
+      if (line.startsWith('@@')) {
+        const m = line.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)?/);
+        if (m) { leftLine = parseInt(m[1]); rightLine = parseInt(m[2]); }
+        html += `<div class="diff-hunk-header">${escape(line)}</div>`;
+        continue;
+      }
+      if (line.startsWith('+')) {
+        html += `<div class="diff-line line-add"><span class="diff-line-num">+${rightLine++}</span><span class="diff-line-content">${escape(line.slice(1))}</span></div>`;
+        addCount++;
+      } else if (line.startsWith('-')) {
+        html += `<div class="diff-line line-del"><span class="diff-line-num">${leftLine++}</span><span class="diff-line-content">${escape(line.slice(1))}</span></div>`;
+        delCount++;
+      } else {
+        html += `<div class="diff-line line-ctx"><span class="diff-line-num">${leftLine}</span><span class="diff-line-content">${escape(line.slice(1))}</span></div>`;
+        leftLine++; rightLine++;
+      }
+    }
+    if (inFile) html += '</div>';
+
+    viewEl.innerHTML = html;
+    statusEl.className = 'status-msg ok';
+    statusEl.textContent = `✓ rendered · +${addCount} added  -${delCount} removed`;
+  }
+</script>

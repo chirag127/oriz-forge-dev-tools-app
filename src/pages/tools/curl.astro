@@ -1,15 +1,58 @@
 ---
 import BaseLayout from '~/layouts/BaseLayout.astro'
 ---
-<BaseLayout title="curl → fetch — Oriz Dev Tools" description="curl → fetch — runs in your browser. Part of Oriz Dev Tools.">
+<BaseLayout title="cURL ↔ fetch converter — Oriz Dev Tools" description="Convert cURL commands to fetch/JavaScript and vice versa. Runs in your browser.">
   <article class="tool">
     <p class="back mono"><a href="/">← all tools</a></p>
-    <h1 class="h1">curl → fetch</h1>
-    <p class="status mono">coming · v0.1</p>
-    <p class="lede">
-      This feature is on the v0.1 roadmap. The page exists so we can iterate on
-      the design and copy in parallel; the implementation lands next sprint.
-    </p>
+    <h1 class="h1">cURL ↔ fetch converter</h1>
+    <p class="status mono ready">ready · v0.1</p>
+
+    <div class="tabs" role="tablist">
+      <button class="tab active" role="tab" data-tab="curl2fetch">cURL → fetch</button>
+      <button class="tab" role="tab" data-tab="fetch2curl">fetch → cURL</button>
+    </div>
+
+    <!-- curl → fetch -->
+    <div class="panel" id="panel-curl2fetch">
+      <label class="label" for="curl-input">cURL command</label>
+      <textarea id="curl-input" class="io" rows="7" placeholder="curl -X POST https://api.example.com/data \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer token123' \
+  -d '{&quot;key&quot;:&quot;value&quot;}'"></textarea>
+      <div class="actions">
+        <button class="btn" id="curl-convert-btn">Convert to fetch</button>
+        <button class="btn secondary" id="curl-copy-btn">Copy output</button>
+      </div>
+      <div id="curl-status" class="status-msg"></div>
+      <pre id="curl-output" class="output" aria-live="polite"></pre>
+    </div>
+
+    <!-- fetch → curl -->
+    <div class="panel hidden" id="panel-fetch2curl">
+      <div class="two-col">
+        <div>
+          <label class="label" for="fetch-url">URL</label>
+          <input id="fetch-url" class="io-line" type="text" placeholder="https://api.example.com/data" />
+        </div>
+        <div>
+          <label class="label" for="fetch-method">Method</label>
+          <select id="fetch-method" class="io-select">
+            <option>GET</option><option>POST</option><option>PUT</option>
+            <option>PATCH</option><option>DELETE</option><option>HEAD</option><option>OPTIONS</option>
+          </select>
+        </div>
+      </div>
+      <label class="label mt" for="fetch-headers">Headers (one per line: Key: Value)</label>
+      <textarea id="fetch-headers" class="io" rows="4" placeholder="Content-Type: application/json&#10;Authorization: Bearer token123"></textarea>
+      <label class="label mt" for="fetch-body">Body (optional)</label>
+      <textarea id="fetch-body" class="io" rows="4" placeholder='{"key":"value"}'></textarea>
+      <div class="actions">
+        <button class="btn" id="fetch-convert-btn">Generate cURL</button>
+        <button class="btn secondary" id="fetch-copy-btn">Copy output</button>
+      </div>
+      <div id="fetch-status" class="status-msg"></div>
+      <pre id="fetch-output" class="output" aria-live="polite"></pre>
+    </div>
   </article>
 </BaseLayout>
 
@@ -21,18 +64,178 @@ import BaseLayout from '~/layouts/BaseLayout.astro'
   .h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.75rem, 4vw, 2.5rem); margin: 0 0 0.5rem; line-height: 1.1; }
   .status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 2rem; }
   .status.ready { color: var(--accent); }
-  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 56ch; }
-  .placeholder { max-width: 60ch; }
-  .placeholder p { color: var(--muted); margin: 0 0 1rem; }
+  .label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 0.4rem; letter-spacing: 0.05em; }
+  .mt { margin-top: 0.75rem; }
   .io {
     width: 100%;
-    padding: 1rem;
+    padding: 0.875rem 1rem;
     background: var(--paper-2);
     border: 1px solid var(--rule);
     color: var(--ink);
     font-family: var(--font-mono);
     font-size: 0.875rem;
     resize: vertical;
+    outline: none;
   }
-  .hint { font-size: 11px; color: var(--muted); margin-top: 0.75rem; }
+  .io:focus { border-color: var(--accent); }
+  .io-line {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    outline: none;
+  }
+  .io-line:focus { border-color: var(--accent); }
+  .io-select {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    outline: none;
+    appearance: auto;
+  }
+  .output {
+    width: 100%;
+    padding: 0.875rem 1rem;
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+    min-height: 3rem;
+    margin: 0;
+  }
+  .tabs { display: flex; gap: 2px; margin-bottom: 1.5rem; border-bottom: 1px solid var(--rule); }
+  .tab { padding: 0.5rem 1rem; background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); font-family: var(--font-mono); font-size: 0.875rem; cursor: pointer; margin-bottom: -1px; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab:hover:not(.active) { color: var(--ink); }
+  .panel { margin-bottom: 1.5rem; }
+  .hidden { display: none; }
+  .actions { display: flex; gap: 0.5rem; margin: 0.75rem 0; flex-wrap: wrap; }
+  .btn { padding: 0.4rem 1rem; background: var(--accent); color: var(--paper); border: none; font-family: var(--font-mono); font-size: 0.8125rem; font-weight: 600; cursor: pointer; }
+  .btn:hover { opacity: 0.85; }
+  .btn.secondary { background: var(--paper-2); color: var(--ink); border: 1px solid var(--rule); }
+  .status-msg { font-family: var(--font-mono); font-size: 0.8125rem; min-height: 1.4rem; margin-bottom: 0.5rem; }
+  .status-msg.ok { color: #4ade80; }
+  .status-msg.err { color: #f87171; }
+  .two-col { display: grid; grid-template-columns: 1fr auto; gap: 0.75rem; margin-bottom: 0; align-items: end; }
+  @media (max-width: 480px) { .two-col { grid-template-columns: 1fr; } }
 </style>
+
+<script>
+  // Tabs
+  document.querySelectorAll<HTMLButtonElement>('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
+      tab.classList.add('active');
+      document.getElementById(`panel-${tab.dataset.tab}`)?.classList.remove('hidden');
+    });
+  });
+
+  function setStatus(el: HTMLElement, msg: string, ok: boolean) {
+    el.textContent = msg;
+    el.className = 'status-msg ' + (ok ? 'ok' : 'err');
+  }
+
+  // cURL → fetch
+  function parseCurl(cmd: string): { method: string; url: string; headers: Record<string,string>; body: string | null } {
+    // Normalize backslash line continuations
+    const normalized = cmd.replace(/\\\n\s*/g, ' ').replace(/\s+/g, ' ').trim();
+    const tokens = normalized.match(/'[^']*'|"[^"]*"|\S+/g) ?? [];
+    let i = 1; // skip 'curl'
+    let method = 'GET';
+    let url = '';
+    const headers: Record<string, string> = {};
+    let body: string | null = null;
+
+    while (i < tokens.length) {
+      const t = tokens[i];
+      if (t === '-X' || t === '--request') { method = tokens[++i].replace(/^['"]|['"]$/g, ''); }
+      else if (t === '-H' || t === '--header') {
+        const h = tokens[++i].replace(/^['"]|['"]$/g, '');
+        const sep = h.indexOf(':');
+        if (sep > -1) headers[h.slice(0,sep).trim()] = h.slice(sep+1).trim();
+      }
+      else if (t === '-d' || t === '--data' || t === '--data-raw' || t === '--data-binary') {
+        body = tokens[++i].replace(/^['"]|['"]$/g, '');
+        if (method === 'GET') method = 'POST';
+      }
+      else if (t === '--json') {
+        body = tokens[++i].replace(/^['"]|['"]$/g, '');
+        method = method === 'GET' ? 'POST' : method;
+        headers['Content-Type'] = 'application/json';
+        headers['Accept'] = 'application/json';
+      }
+      else if (!t.startsWith('-')) { url = t.replace(/^['"]|['"]$/g, ''); }
+      i++;
+    }
+    return { method, url, headers, body };
+  }
+
+  const curlInput = document.getElementById('curl-input') as HTMLTextAreaElement;
+  const curlOutput = document.getElementById('curl-output') as HTMLPreElement;
+  const curlStatus = document.getElementById('curl-status') as HTMLElement;
+
+  document.getElementById('curl-convert-btn')!.addEventListener('click', () => {
+    const raw = curlInput.value.trim();
+    if (!raw) { setStatus(curlStatus, '✗ paste a curl command first', false); return; }
+    try {
+      const { method, url, headers, body } = parseCurl(raw);
+      if (!url) { setStatus(curlStatus, '✗ could not detect URL', false); return; }
+      const lines: string[] = [];
+      lines.push(`const response = await fetch(${JSON.stringify(url)}, {`);
+      const opts: string[] = [];
+      if (method !== 'GET') opts.push(`  method: ${JSON.stringify(method)}`);
+      if (Object.keys(headers).length) {
+        opts.push(`  headers: ${JSON.stringify(headers, null, 4).replace(/\n/g, '\n  ')}`);
+      }
+      if (body) opts.push(`  body: ${JSON.stringify(body)}`);
+      lines.push(opts.join(',\n'));
+      lines.push('});');
+      lines.push('const data = await response.json();');
+      curlOutput.textContent = lines.join('\n');
+      setStatus(curlStatus, '✓ converted', true);
+    } catch(e: unknown) {
+      setStatus(curlStatus, '✗ ' + (e as Error).message, false);
+    }
+  });
+
+  document.getElementById('curl-copy-btn')!.addEventListener('click', () => {
+    if (curlOutput.textContent) navigator.clipboard.writeText(curlOutput.textContent);
+  });
+
+  // fetch → cURL
+  const fetchUrl = document.getElementById('fetch-url') as HTMLInputElement;
+  const fetchMethod = document.getElementById('fetch-method') as HTMLSelectElement;
+  const fetchHeaders = document.getElementById('fetch-headers') as HTMLTextAreaElement;
+  const fetchBody = document.getElementById('fetch-body') as HTMLTextAreaElement;
+  const fetchOutput = document.getElementById('fetch-output') as HTMLPreElement;
+  const fetchStatus = document.getElementById('fetch-status') as HTMLElement;
+
+  document.getElementById('fetch-convert-btn')!.addEventListener('click', () => {
+    const url = fetchUrl.value.trim();
+    if (!url) { setStatus(fetchStatus, '✗ URL is required', false); return; }
+    const method = fetchMethod.value;
+    const parts: string[] = [`curl -X ${method} ${JSON.stringify(url)}`];
+    fetchHeaders.value.trim().split('\n').forEach(line => {
+      if (line.trim()) parts.push(`  -H ${JSON.stringify(line.trim())}`);
+    });
+    const body = fetchBody.value.trim();
+    if (body) parts.push(`  -d ${JSON.stringify(body)}`);
+    fetchOutput.textContent = parts.join(' \\\n');
+    setStatus(fetchStatus, '✓ generated', true);
+  });
+
+  document.getElementById('fetch-copy-btn')!.addEventListener('click', () => {
+    if (fetchOutput.textContent) navigator.clipboard.writeText(fetchOutput.textContent);
+  });
+</script>

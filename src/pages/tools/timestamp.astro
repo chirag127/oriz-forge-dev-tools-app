@@ -1,0 +1,168 @@
+---
+import BaseLayout from '~/layouts/BaseLayout.astro'
+---
+<BaseLayout title="Timestamp converter — Oriz Dev Tools" description="Convert between Unix timestamps, ISO 8601, and human-readable dates. Runs in your browser.">
+  <article class="tool">
+    <p class="back mono"><a href="/">← all tools</a></p>
+    <h1 class="h1">Timestamp converter</h1>
+    <p class="status mono ready">ready · v0.1</p>
+
+    <div class="now-row">
+      <button class="btn" id="now-btn">Use current time</button>
+      <span id="now-display" class="now-display mono"></span>
+    </div>
+
+    <div class="fields">
+      <div class="field">
+        <label class="label" for="ts-unix">Unix (seconds)</label>
+        <div class="input-row">
+          <input id="ts-unix" class="io-line" type="text" placeholder="1719129600" />
+          <button class="from-btn btn-sm" data-from="unix">convert</button>
+          <button class="copy-btn" data-src="ts-unix">copy</button>
+        </div>
+      </div>
+      <div class="field">
+        <label class="label" for="ts-unix-ms">Unix (milliseconds)</label>
+        <div class="input-row">
+          <input id="ts-unix-ms" class="io-line" type="text" placeholder="1719129600000" />
+          <button class="from-btn btn-sm" data-from="unix-ms">convert</button>
+          <button class="copy-btn" data-src="ts-unix-ms">copy</button>
+        </div>
+      </div>
+      <div class="field">
+        <label class="label" for="ts-iso">ISO 8601 (UTC)</label>
+        <div class="input-row">
+          <input id="ts-iso" class="io-line" type="text" placeholder="2024-06-23T08:00:00.000Z" />
+          <button class="from-btn btn-sm" data-from="iso">convert</button>
+          <button class="copy-btn" data-src="ts-iso">copy</button>
+        </div>
+      </div>
+      <div class="field">
+        <label class="label" for="ts-human">Human readable (local)</label>
+        <div class="input-row">
+          <input id="ts-human" class="io-line" type="text" placeholder="Mon Jun 23 2024 08:00:00 GMT+0000" readonly />
+          <button class="copy-btn" data-src="ts-human">copy</button>
+        </div>
+      </div>
+      <div class="field">
+        <label class="label" for="ts-relative">Relative</label>
+        <div class="input-row">
+          <input id="ts-relative" class="io-line" type="text" readonly placeholder="2 days ago" />
+          <button class="copy-btn" data-src="ts-relative">copy</button>
+        </div>
+      </div>
+    </div>
+    <div id="ts-status" class="status-msg"></div>
+  </article>
+</BaseLayout>
+
+<style>
+  .tool { padding-block: 0 2rem; }
+  .back { font-size: 12px; margin: 0 0 2rem; }
+  .back a { color: var(--muted); text-decoration: none; }
+  .back a:hover { color: var(--ink); }
+  .h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.75rem, 4vw, 2.5rem); margin: 0 0 0.5rem; line-height: 1.1; }
+  .status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 2rem; }
+  .status.ready { color: var(--accent); }
+  .label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 0.4rem; letter-spacing: 0.05em; }
+  .now-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+  .now-display { font-size: 0.8125rem; color: var(--muted); }
+  .fields { display: flex; flex-direction: column; gap: 0.75rem; }
+  .field { display: flex; flex-direction: column; }
+  .input-row { display: flex; gap: 0.5rem; align-items: center; }
+  .io-line {
+    flex: 1;
+    padding: 0.6rem 0.75rem;
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    outline: none;
+  }
+  .io-line:focus { border-color: var(--accent); }
+  .io-line[readonly] { color: var(--muted); }
+  .btn { padding: 0.4rem 1rem; background: var(--accent); color: var(--paper); border: none; font-family: var(--font-mono); font-size: 0.8125rem; font-weight: 600; cursor: pointer; }
+  .btn:hover { opacity: 0.85; }
+  .btn-sm { padding: 0.35rem 0.65rem; background: var(--accent); color: var(--paper); border: none; font-family: var(--font-mono); font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .btn-sm:hover { opacity: 0.85; }
+  .copy-btn { background: none; border: 1px solid var(--rule); color: var(--muted); font-family: var(--font-mono); font-size: 11px; padding: 0.35rem 0.65rem; cursor: pointer; white-space: nowrap; }
+  .copy-btn:hover { color: var(--ink); }
+  .status-msg { font-family: var(--font-mono); font-size: 0.8125rem; min-height: 1.4rem; margin-top: 0.75rem; }
+  .status-msg.ok { color: #4ade80; }
+  .status-msg.err { color: #f87171; }
+</style>
+
+<script>
+  const unixEl = document.getElementById('ts-unix') as HTMLInputElement;
+  const unixMsEl = document.getElementById('ts-unix-ms') as HTMLInputElement;
+  const isoEl = document.getElementById('ts-iso') as HTMLInputElement;
+  const humanEl = document.getElementById('ts-human') as HTMLInputElement;
+  const relEl = document.getElementById('ts-relative') as HTMLInputElement;
+  const statusEl = document.getElementById('ts-status') as HTMLElement;
+
+  function relative(ms: number): string {
+    const diff = Date.now() - ms;
+    const abs = Math.abs(diff);
+    const future = diff < 0;
+    const s = Math.floor(abs/1000);
+    const m = Math.floor(s/60), h = Math.floor(m/60), d = Math.floor(h/24), w = Math.floor(d/7), mo = Math.floor(d/30), y = Math.floor(d/365);
+    let label = '';
+    if (abs < 5000) label = 'just now';
+    else if (s < 60) label = `${s}s`;
+    else if (m < 60) label = `${m}m`;
+    else if (h < 24) label = `${h}h`;
+    else if (d < 7) label = `${d}d`;
+    else if (w < 5) label = `${w}w`;
+    else if (mo < 12) label = `${mo}mo`;
+    else label = `${y}y`;
+    if (label === 'just now') return label;
+    return future ? `in ${label}` : `${label} ago`;
+  }
+
+  function populate(d: Date) {
+    const ms = d.getTime();
+    unixEl.value = Math.floor(ms/1000).toString();
+    unixMsEl.value = ms.toString();
+    isoEl.value = d.toISOString();
+    humanEl.value = d.toString();
+    relEl.value = relative(ms);
+    statusEl.className = 'status-msg ok';
+    statusEl.textContent = '✓ converted';
+  }
+
+  document.getElementById('now-btn')!.addEventListener('click', () => {
+    const d = new Date();
+    populate(d);
+    (document.getElementById('now-display') as HTMLElement).textContent = d.toISOString();
+  });
+
+  document.querySelectorAll<HTMLButtonElement>('.from-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const from = btn.dataset.from!;
+      try {
+        let d: Date;
+        if (from === 'unix') d = new Date(parseInt(unixEl.value) * 1000);
+        else if (from === 'unix-ms') d = new Date(parseInt(unixMsEl.value));
+        else d = new Date(isoEl.value);
+        if (isNaN(d.getTime())) throw new Error('invalid date');
+        populate(d);
+      } catch(e: unknown) {
+        statusEl.className = 'status-msg err';
+        statusEl.textContent = '✗ ' + (e as Error).message;
+      }
+    });
+  });
+
+  document.querySelectorAll<HTMLButtonElement>('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const src = document.getElementById(btn.dataset.src!) as HTMLInputElement;
+      navigator.clipboard.writeText(src.value);
+      btn.textContent = 'copied!';
+      setTimeout(() => { btn.textContent = 'copy'; }, 1500);
+    });
+  });
+
+  // Init with current time
+  populate(new Date());
+</script>

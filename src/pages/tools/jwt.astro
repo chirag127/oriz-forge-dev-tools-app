@@ -1,15 +1,43 @@
 ---
 import BaseLayout from '~/layouts/BaseLayout.astro'
 ---
-<BaseLayout title="JWT decoder — Oriz Dev Tools" description="JWT decoder — runs in your browser. Part of Oriz Dev Tools.">
+<BaseLayout title="JWT decoder — Oriz Dev Tools" description="Decode and inspect JWT header, payload, and signature. Runs entirely in your browser.">
   <article class="tool">
     <p class="back mono"><a href="/">← all tools</a></p>
     <h1 class="h1">JWT decoder</h1>
-    <p class="status mono">coming · v0.1</p>
-    <p class="lede">
-      This feature is on the v0.1 roadmap. The page exists so we can iterate on
-      the design and copy in parallel; the implementation lands next sprint.
-    </p>
+    <p class="status mono ready">ready · v0.1</p>
+
+    <label class="label" for="jwt-input">JWT token</label>
+    <textarea id="jwt-input" class="io" rows="4" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature"></textarea>
+    <div class="actions">
+      <button class="btn" id="jwt-decode-btn">Decode</button>
+    </div>
+    <div id="jwt-status" class="status-msg"></div>
+
+    <div id="jwt-result" class="hidden">
+      <div class="section">
+        <div class="section-header">
+          <span class="section-label header-color">Header</span>
+          <button class="copy-btn" data-target="jwt-header">copy</button>
+        </div>
+        <pre id="jwt-header" class="output"></pre>
+      </div>
+      <div class="section">
+        <div class="section-header">
+          <span class="section-label payload-color">Payload</span>
+          <button class="copy-btn" data-target="jwt-payload">copy</button>
+        </div>
+        <pre id="jwt-payload" class="output"></pre>
+      </div>
+      <div class="section">
+        <div class="section-header">
+          <span class="section-label sig-color">Signature</span>
+          <button class="copy-btn" data-target="jwt-signature">copy</button>
+        </div>
+        <pre id="jwt-signature" class="output sig"></pre>
+      </div>
+      <div id="jwt-claims" class="claims"></div>
+    </div>
   </article>
 </BaseLayout>
 
@@ -21,18 +49,136 @@ import BaseLayout from '~/layouts/BaseLayout.astro'
   .h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.75rem, 4vw, 2.5rem); margin: 0 0 0.5rem; line-height: 1.1; }
   .status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 2rem; }
   .status.ready { color: var(--accent); }
-  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 56ch; }
-  .placeholder { max-width: 60ch; }
-  .placeholder p { color: var(--muted); margin: 0 0 1rem; }
+  .label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 0.4rem; letter-spacing: 0.05em; }
   .io {
     width: 100%;
-    padding: 1rem;
+    padding: 0.875rem 1rem;
     background: var(--paper-2);
     border: 1px solid var(--rule);
     color: var(--ink);
     font-family: var(--font-mono);
     font-size: 0.875rem;
     resize: vertical;
+    outline: none;
   }
-  .hint { font-size: 11px; color: var(--muted); margin-top: 0.75rem; }
+  .io:focus { border-color: var(--accent); }
+  .actions { margin: 0.75rem 0; }
+  .btn {
+    padding: 0.4rem 1rem;
+    background: var(--accent);
+    color: var(--paper);
+    border: none;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn:hover { opacity: 0.85; }
+  .status-msg { font-family: var(--font-mono); font-size: 0.8125rem; min-height: 1.4rem; margin-bottom: 0.5rem; }
+  .status-msg.ok { color: #4ade80; }
+  .status-msg.err { color: #f87171; }
+  .hidden { display: none; }
+  .section { margin-bottom: 1.25rem; }
+  .section-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 0.4rem; }
+  .section-label { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; }
+  .header-color { color: #fb923c; }
+  .payload-color { color: #a78bfa; }
+  .sig-color { color: #4ade80; }
+  .copy-btn { background: none; border: 1px solid var(--rule); color: var(--muted); font-family: var(--font-mono); font-size: 11px; padding: 0.1rem 0.5rem; cursor: pointer; }
+  .copy-btn:hover { color: var(--ink); }
+  .output {
+    width: 100%;
+    padding: 0.875rem 1rem;
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin: 0;
+  }
+  .sig { color: var(--muted); word-break: break-all; }
+  .claims { margin-top: 1rem; padding: 0.875rem 1rem; background: var(--paper-2); border: 1px solid var(--rule); }
+  .claims .claim-row { display: flex; gap: 1rem; font-family: var(--font-mono); font-size: 0.8125rem; padding: 0.25rem 0; border-bottom: 1px solid var(--rule); }
+  .claims .claim-row:last-child { border-bottom: none; }
+  .claims .claim-key { color: var(--muted); min-width: 8ch; }
+  .claims .claim-val { color: var(--accent); }
+  .claims .claim-note { color: #fbbf24; font-size: 11px; }
 </style>
+
+<script>
+  function b64urlDecode(s: string): string {
+    const padded = s.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = padded.length % 4;
+    const full = pad ? padded + '='.repeat(4 - pad) : padded;
+    return atob(full);
+  }
+
+  function formatDate(ts: number): string {
+    try { return new Date(ts * 1000).toUTCString(); } catch { return String(ts); }
+  }
+
+  const input = document.getElementById('jwt-input') as HTMLTextAreaElement;
+  const status = document.getElementById('jwt-status') as HTMLElement;
+  const result = document.getElementById('jwt-result') as HTMLElement;
+  const headerEl = document.getElementById('jwt-header') as HTMLPreElement;
+  const payloadEl = document.getElementById('jwt-payload') as HTMLPreElement;
+  const signatureEl = document.getElementById('jwt-signature') as HTMLPreElement;
+  const claimsEl = document.getElementById('jwt-claims') as HTMLElement;
+
+  document.getElementById('jwt-decode-btn')!.addEventListener('click', () => {
+    const token = input.value.trim();
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      status.className = 'status-msg err';
+      status.textContent = '✗ invalid JWT: expected 3 parts separated by dots';
+      result.classList.add('hidden');
+      return;
+    }
+    try {
+      const header = JSON.parse(b64urlDecode(parts[0]));
+      const payload = JSON.parse(b64urlDecode(parts[1]));
+      headerEl.textContent = JSON.stringify(header, null, 2);
+      payloadEl.textContent = JSON.stringify(payload, null, 2);
+      signatureEl.textContent = parts[2];
+
+      // Human-readable claims
+      const claimDefs: Record<string, string> = {
+        sub: 'Subject', iss: 'Issuer', aud: 'Audience',
+        exp: 'Expires', iat: 'Issued at', nbf: 'Not before',
+        jti: 'JWT ID'
+      };
+      const timeClaims = new Set(['exp', 'iat', 'nbf']);
+      const now = Math.floor(Date.now() / 1000);
+      const rows = Object.entries(payload).map(([k, v]) => {
+        const label = claimDefs[k] ?? k;
+        let val = String(v);
+        let note = '';
+        if (timeClaims.has(k) && typeof v === 'number') {
+          val = formatDate(v);
+          if (k === 'exp') note = v < now ? '(expired)' : '(valid)';
+        }
+        return `<div class="claim-row"><span class="claim-key">${label}</span><span class="claim-val">${val}</span>${note ? `<span class="claim-note">${note}</span>` : ''}</div>`;
+      }).join('');
+      claimsEl.innerHTML = rows;
+
+      status.className = 'status-msg ok';
+      status.textContent = '✓ decoded · alg: ' + (header.alg ?? '?') + ' · typ: ' + (header.typ ?? '?');
+      result.classList.remove('hidden');
+    } catch(e: unknown) {
+      status.className = 'status-msg err';
+      status.textContent = '✗ ' + (e as Error).message;
+      result.classList.add('hidden');
+    }
+  });
+
+  document.querySelectorAll<HTMLButtonElement>('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = document.getElementById(btn.dataset.target!)!;
+      navigator.clipboard.writeText(target.textContent ?? '');
+      btn.textContent = 'copied!';
+      setTimeout(() => { btn.textContent = 'copy'; }, 1500);
+    });
+  });
+</script>
