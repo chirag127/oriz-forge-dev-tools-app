@@ -1,16 +1,24 @@
 ---
 import BaseLayout from '~/layouts/BaseLayout.astro'
 ---
-<BaseLayout title="JSON schema generator — Oriz Dev Tools" description="JSON schema generator — runs in your browser. Part of Oriz Dev Tools.">
+<BaseLayout title="JSON schema generator — Oriz Dev Tools" description="Infer a JSON Schema (Draft 2020-12) from sample JSON. Runs in your browser.">
   <article class="tool">
     <p class="back mono"><a href="/">← all tools</a></p>
     <h1 class="h1">JSON schema generator</h1>
-    <p class="status mono ready">ready · v0</p>
-    <div class="placeholder">
-      <p>This tool is wired. Drop in your input or paste below — everything stays in your browser.</p>
-      <textarea class="io" placeholder="paste input here…" rows="8"></textarea>
-      <p class="hint mono">v0 = UI present + core path wired. Full feature set lands in v0.1.</p>
+    <p class="status mono ready">ready · v0.1</p>
+    <p class="lede">Paste sample JSON; get an inferred JSON Schema (Draft 2020-12). Object fields are marked required; arrays unify item shapes.</p>
+
+    <label class="label" for="js-in">JSON sample</label>
+    <textarea id="js-in" class="io" rows="10" placeholder='{"name":"Alice","age":30,"tags":["admin","beta"]}'></textarea>
+
+    <div class="actions">
+      <button class="btn" id="js-run">Generate schema</button>
+      <button class="btn secondary" id="js-copy">Copy schema</button>
     </div>
+    <div id="js-status" class="status-msg" aria-live="polite"></div>
+
+    <label class="label" for="js-out">Inferred schema</label>
+    <pre id="js-out" class="output" aria-live="polite"></pre>
   </article>
 </BaseLayout>
 
@@ -22,18 +30,126 @@ import BaseLayout from '~/layouts/BaseLayout.astro'
   .h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.75rem, 4vw, 2.5rem); margin: 0 0 0.5rem; line-height: 1.1; }
   .status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 2rem; }
   .status.ready { color: var(--accent); }
-  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 56ch; }
-  .placeholder { max-width: 60ch; }
-  .placeholder p { color: var(--muted); margin: 0 0 1rem; }
-  .io {
-    width: 100%;
-    padding: 1rem;
-    background: var(--paper-2);
-    border: 1px solid var(--rule);
-    color: var(--ink);
-    font-family: var(--font-mono);
-    font-size: 0.875rem;
-    resize: vertical;
+  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 56ch; margin-bottom: 1.5rem; }
+  .label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 0.4rem; letter-spacing: 0.05em; }
+  .io, .output {
+    width: 100%; padding: 0.875rem 1rem;
+    background: var(--paper-2); border: 1px solid var(--rule);
+    color: var(--ink); font-family: var(--font-mono); font-size: 0.875rem;
+    resize: vertical; outline: none;
   }
-  .hint { font-size: 11px; color: var(--muted); margin-top: 0.75rem; }
+  .io:focus { border-color: var(--accent); }
+  .output { white-space: pre; overflow-x: auto; min-height: 4rem; margin: 0; }
+  .actions { display: flex; gap: 0.5rem; margin: 0.75rem 0; flex-wrap: wrap; }
+  .btn { padding: 0.4rem 1rem; background: var(--accent); color: var(--paper); border: none; font-family: var(--font-mono); font-size: 0.8125rem; font-weight: 600; cursor: pointer; letter-spacing: 0.03em; }
+  .btn:hover { opacity: 0.85; }
+  .btn.secondary { background: var(--paper-2); color: var(--ink); border: 1px solid var(--rule); }
+  .status-msg { font-family: var(--font-mono); font-size: 0.8125rem; min-height: 1.4rem; margin: 0.25rem 0 0.75rem; }
+  .status-msg.ok { color: var(--accent); }
+  .status-msg.err { color: #c1440e; font-weight: 600; }
 </style>
+
+<script>
+  type Schema = Record<string, unknown>;
+
+  function infer(value: unknown): Schema {
+    if (value === null) return { type: 'null' };
+    if (Array.isArray(value)) {
+      if (value.length === 0) return { type: 'array' };
+      const itemSchemas = value.map(infer);
+      const merged = mergeSchemas(itemSchemas);
+      return { type: 'array', items: merged };
+    }
+    const t = typeof value;
+    if (t === 'string') {
+      const s = value as string;
+      const fmt = detectFormat(s);
+      return fmt ? { type: 'string', format: fmt } : { type: 'string' };
+    }
+    if (t === 'number') return { type: Number.isInteger(value) ? 'integer' : 'number' };
+    if (t === 'boolean') return { type: 'boolean' };
+    if (t === 'object') {
+      const obj = value as Record<string, unknown>;
+      const properties: Record<string, Schema> = {};
+      const required: string[] = [];
+      for (const [k, v] of Object.entries(obj)) {
+        properties[k] = infer(v);
+        required.push(k);
+      }
+      const out: Schema = { type: 'object', properties };
+      if (required.length) out.required = required;
+      return out;
+    }
+    return {};
+  }
+
+  function detectFormat(s: string): string | null {
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})$/.test(s)) return 'date-time';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return 'date';
+    if (/^\d{2}:\d{2}:\d{2}$/.test(s)) return 'time';
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)) return 'email';
+    if (/^https?:\/\//.test(s)) return 'uri';
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) return 'uuid';
+    return null;
+  }
+
+  function mergeSchemas(schemas: Schema[]): Schema {
+    if (schemas.length === 1) return schemas[0];
+    const types = new Set<string>();
+    schemas.forEach(s => { if (typeof s.type === 'string') types.add(s.type); });
+    if (types.size === 1) {
+      const only = [...types][0];
+      if (only === 'object') {
+        const allProps: Record<string, Schema[]> = {};
+        const counts: Record<string, number> = {};
+        schemas.forEach(s => {
+          const p = (s.properties as Record<string, Schema>) || {};
+          for (const [k, v] of Object.entries(p)) {
+            (allProps[k] = allProps[k] || []).push(v);
+            counts[k] = (counts[k] || 0) + 1;
+          }
+        });
+        const merged: Record<string, Schema> = {};
+        for (const [k, arr] of Object.entries(allProps)) merged[k] = mergeSchemas(arr);
+        const required = Object.keys(counts).filter(k => counts[k] === schemas.length);
+        const out: Schema = { type: 'object', properties: merged };
+        if (required.length) out.required = required;
+        return out;
+      }
+      if (only === 'array') {
+        const items = schemas.map(s => s.items as Schema).filter(Boolean);
+        if (items.length === 0) return { type: 'array' };
+        return { type: 'array', items: mergeSchemas(items) };
+      }
+      return { type: only };
+    }
+    return { type: [...types].sort() };
+  }
+
+  const inEl = document.getElementById('js-in') as HTMLTextAreaElement;
+  const outEl = document.getElementById('js-out') as HTMLPreElement;
+  const statusEl = document.getElementById('js-status') as HTMLElement;
+
+  function setStatus(msg: string, ok: boolean) {
+    statusEl.textContent = msg;
+    statusEl.className = 'status-msg ' + (ok ? 'ok' : 'err');
+  }
+  function run() {
+    const v = inEl.value.trim();
+    if (!v) { outEl.textContent = ''; setStatus('', true); return; }
+    try {
+      const parsed = JSON.parse(v);
+      const schema = { $schema: 'https://json-schema.org/draft/2020-12/schema', ...infer(parsed) };
+      outEl.textContent = JSON.stringify(schema, null, 2);
+      setStatus('✓ schema generated', true);
+    } catch (e) {
+      outEl.textContent = '';
+      setStatus('✗ ' + (e as Error).message, false);
+    }
+  }
+  document.getElementById('js-run')!.addEventListener('click', run);
+  inEl.addEventListener('input', run);
+  document.getElementById('js-copy')!.addEventListener('click', () => {
+    if (outEl.textContent) navigator.clipboard.writeText(outEl.textContent);
+  });
+</script>

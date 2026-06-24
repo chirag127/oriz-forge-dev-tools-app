@@ -1,15 +1,30 @@
 ---
 import BaseLayout from '~/layouts/BaseLayout.astro'
 ---
-<BaseLayout title="Hex / binary converters — Oriz Dev Tools" description="Hex / binary converters — runs in your browser. Part of Oriz Dev Tools.">
+<BaseLayout title="Hex / binary converters — Oriz Dev Tools" description="Convert between hex, binary, decimal, octal, and ASCII text. Runs in your browser.">
   <article class="tool">
     <p class="back mono"><a href="/">← all tools</a></p>
     <h1 class="h1">Hex / binary converters</h1>
-    <p class="status mono">coming · v0.1</p>
-    <p class="lede">
-      This feature is on the v0.1 roadmap. The page exists so we can iterate on
-      the design and copy in parallel; the implementation lands next sprint.
-    </p>
+    <p class="status mono ready">ready · v0.1</p>
+    <p class="lede">Convert numbers between bases (hex / bin / dec / oct), or convert UTF-8 text to/from hex and binary representations.</p>
+
+    <h2 class="h2">Number bases</h2>
+    <div class="grid">
+      <label class="label" for="n-dec">Decimal<input id="n-dec" class="io" data-base="10" autocomplete="off" /></label>
+      <label class="label" for="n-hex">Hex<input id="n-hex" class="io" data-base="16" autocomplete="off" /></label>
+      <label class="label" for="n-bin">Binary<input id="n-bin" class="io" data-base="2" autocomplete="off" /></label>
+      <label class="label" for="n-oct">Octal<input id="n-oct" class="io" data-base="8" autocomplete="off" /></label>
+    </div>
+    <div id="n-status" class="status-msg" aria-live="polite"></div>
+
+    <h2 class="h2">Text ↔ hex / binary</h2>
+    <label class="label" for="t-text">Text (UTF-8)</label>
+    <textarea id="t-text" class="io" rows="3" placeholder="hello"></textarea>
+    <label class="label" for="t-hex">Hex bytes</label>
+    <textarea id="t-hex" class="io" rows="3" placeholder="68 65 6c 6c 6f"></textarea>
+    <label class="label" for="t-binary">Binary bytes</label>
+    <textarea id="t-binary" class="io" rows="3" placeholder="01101000 01100101 01101100 01101100 01101111"></textarea>
+    <div id="t-status" class="status-msg" aria-live="polite"></div>
   </article>
 </BaseLayout>
 
@@ -19,20 +34,113 @@ import BaseLayout from '~/layouts/BaseLayout.astro'
   .back a { color: var(--muted); text-decoration: none; }
   .back a:hover { color: var(--ink); }
   .h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.75rem, 4vw, 2.5rem); margin: 0 0 0.5rem; line-height: 1.1; }
+  .h2 { font-family: var(--font-display); font-weight: 600; font-size: 1.25rem; margin: 2rem 0 1rem; }
   .status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 2rem; }
   .status.ready { color: var(--accent); }
-  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 56ch; }
-  .placeholder { max-width: 60ch; }
-  .placeholder p { color: var(--muted); margin: 0 0 1rem; }
+  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 56ch; margin-bottom: 1.5rem; }
+  .label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 0.4rem; letter-spacing: 0.05em; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  @media (max-width: 540px) { .grid { grid-template-columns: 1fr; } }
   .io {
-    width: 100%;
-    padding: 1rem;
-    background: var(--paper-2);
-    border: 1px solid var(--rule);
-    color: var(--ink);
-    font-family: var(--font-mono);
-    font-size: 0.875rem;
-    resize: vertical;
+    width: 100%; padding: 0.625rem 0.875rem;
+    background: var(--paper-2); border: 1px solid var(--rule);
+    color: var(--ink); font-family: var(--font-mono); font-size: 0.875rem;
+    resize: vertical; outline: none;
   }
-  .hint { font-size: 11px; color: var(--muted); margin-top: 0.75rem; }
+  .io:focus { border-color: var(--accent); }
+  .status-msg { font-family: var(--font-mono); font-size: 0.8125rem; min-height: 1.4rem; margin: 0.5rem 0 0; }
+  .status-msg.ok { color: var(--accent); }
+  .status-msg.err { color: #c1440e; font-weight: 600; }
 </style>
+
+<script>
+  function setStatus(el: HTMLElement, msg: string, ok: boolean) {
+    el.textContent = msg;
+    el.className = 'status-msg ' + (ok ? 'ok' : 'err');
+  }
+
+  const inputs = document.querySelectorAll<HTMLInputElement>('.grid input.io');
+  const nStatus = document.getElementById('n-status') as HTMLElement;
+  let suppress = false;
+  function parseToBig(v: string, base: number): bigint | null {
+    v = v.trim().replace(/^0x/i, '').replace(/^0b/i, '').replace(/\s+/g, '');
+    if (!v) return null;
+    const valid: Record<number, RegExp> = {
+      2: /^-?[01]+$/, 8: /^-?[0-7]+$/, 10: /^-?\d+$/, 16: /^-?[0-9a-fA-F]+$/
+    };
+    if (!valid[base].test(v)) throw new Error('invalid base ' + base);
+    let neg = false;
+    if (v.startsWith('-')) { neg = true; v = v.slice(1); }
+    let n = 0n;
+    for (const ch of v) n = n * BigInt(base) + BigInt(parseInt(ch, base));
+    return neg ? -n : n;
+  }
+  inputs.forEach(el => {
+    el.addEventListener('input', () => {
+      if (suppress) return;
+      const base = parseInt(el.dataset.base!, 10);
+      try {
+        const n = parseToBig(el.value, base);
+        if (n === null) { inputs.forEach(o => { if (o !== el) o.value = ''; }); setStatus(nStatus, '', true); return; }
+        suppress = true;
+        inputs.forEach(o => {
+          if (o === el) return;
+          const b = parseInt(o.dataset.base!, 10);
+          o.value = n.toString(b);
+        });
+        suppress = false;
+        setStatus(nStatus, `✓ ${n.toString(10)} (base 10)`, true);
+      } catch (e) {
+        setStatus(nStatus, '✗ ' + (e as Error).message, false);
+      }
+    });
+  });
+
+  const textEl = document.getElementById('t-text') as HTMLTextAreaElement;
+  const hexEl = document.getElementById('t-hex') as HTMLTextAreaElement;
+  const binEl = document.getElementById('t-binary') as HTMLTextAreaElement;
+  const tStatus = document.getElementById('t-status') as HTMLElement;
+  let tSuppress = false;
+  function bytesToHex(b: Uint8Array) { return Array.from(b, x => x.toString(16).padStart(2, '0')).join(' '); }
+  function bytesToBin(b: Uint8Array) { return Array.from(b, x => x.toString(2).padStart(8, '0')).join(' '); }
+  function hexToBytes(s: string): Uint8Array {
+    const cleaned = s.replace(/\s+|0x/gi, '');
+    if (cleaned.length % 2) throw new Error('odd hex length');
+    if (!/^[0-9a-fA-F]*$/.test(cleaned)) throw new Error('invalid hex chars');
+    const out = new Uint8Array(cleaned.length / 2);
+    for (let i = 0; i < out.length; i++) out[i] = parseInt(cleaned.substr(i * 2, 2), 16);
+    return out;
+  }
+  function binToBytes(s: string): Uint8Array {
+    const cleaned = s.replace(/\s+/g, '');
+    if (cleaned.length % 8) throw new Error('binary length must be multiple of 8');
+    if (!/^[01]*$/.test(cleaned)) throw new Error('invalid binary chars');
+    const out = new Uint8Array(cleaned.length / 8);
+    for (let i = 0; i < out.length; i++) out[i] = parseInt(cleaned.substr(i * 8, 8), 2);
+    return out;
+  }
+  textEl.addEventListener('input', () => {
+    if (tSuppress) return;
+    try {
+      const b = new TextEncoder().encode(textEl.value);
+      tSuppress = true; hexEl.value = bytesToHex(b); binEl.value = bytesToBin(b); tSuppress = false;
+      setStatus(tStatus, `✓ ${b.length} bytes`, true);
+    } catch (e) { setStatus(tStatus, '✗ ' + (e as Error).message, false); }
+  });
+  hexEl.addEventListener('input', () => {
+    if (tSuppress) return;
+    try {
+      const b = hexToBytes(hexEl.value);
+      tSuppress = true; textEl.value = new TextDecoder().decode(b); binEl.value = bytesToBin(b); tSuppress = false;
+      setStatus(tStatus, `✓ ${b.length} bytes`, true);
+    } catch (e) { setStatus(tStatus, '✗ ' + (e as Error).message, false); }
+  });
+  binEl.addEventListener('input', () => {
+    if (tSuppress) return;
+    try {
+      const b = binToBytes(binEl.value);
+      tSuppress = true; textEl.value = new TextDecoder().decode(b); hexEl.value = bytesToHex(b); tSuppress = false;
+      setStatus(tStatus, `✓ ${b.length} bytes`, true);
+    } catch (e) { setStatus(tStatus, '✗ ' + (e as Error).message, false); }
+  });
+</script>

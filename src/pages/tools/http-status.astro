@@ -1,15 +1,25 @@
 ---
 import BaseLayout from '~/layouts/BaseLayout.astro'
 ---
-<BaseLayout title="HTTP status code ref — Oriz Dev Tools" description="HTTP status code ref — runs in your browser. Part of Oriz Dev Tools.">
+<BaseLayout title="HTTP status codes — Oriz Dev Tools" description="Searchable HTTP status code reference. Runs in your browser.">
   <article class="tool">
     <p class="back mono"><a href="/">← all tools</a></p>
-    <h1 class="h1">HTTP status code ref</h1>
-    <p class="status mono">coming · v0.1</p>
-    <p class="lede">
-      This feature is on the v0.1 roadmap. The page exists so we can iterate on
-      the design and copy in parallel; the implementation lands next sprint.
-    </p>
+    <h1 class="h1">HTTP status code reference</h1>
+    <p class="status mono ready">ready · v0.1</p>
+    <p class="lede">Searchable reference for HTTP response status codes (RFC 9110 + common extensions). Type a code or keyword to filter.</p>
+
+    <label class="label" for="hs-in">Search</label>
+    <input id="hs-in" class="io" placeholder="e.g. 404, teapot, unauthorized" autocomplete="off" />
+    <div class="row mono">
+      <button class="chip" data-filter="1xx">1xx</button>
+      <button class="chip" data-filter="2xx">2xx</button>
+      <button class="chip" data-filter="3xx">3xx</button>
+      <button class="chip" data-filter="4xx">4xx</button>
+      <button class="chip" data-filter="5xx">5xx</button>
+      <button class="chip" data-filter="">all</button>
+    </div>
+    <div id="hs-count" class="status-msg ok" aria-live="polite"></div>
+    <div id="hs-list" class="list"></div>
   </article>
 </BaseLayout>
 
@@ -21,18 +31,119 @@ import BaseLayout from '~/layouts/BaseLayout.astro'
   .h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.75rem, 4vw, 2.5rem); margin: 0 0 0.5rem; line-height: 1.1; }
   .status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 2rem; }
   .status.ready { color: var(--accent); }
-  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 56ch; }
-  .placeholder { max-width: 60ch; }
-  .placeholder p { color: var(--muted); margin: 0 0 1rem; }
+  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 56ch; margin-bottom: 1.5rem; }
+  .label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 0.4rem; letter-spacing: 0.05em; }
   .io {
-    width: 100%;
-    padding: 1rem;
-    background: var(--paper-2);
-    border: 1px solid var(--rule);
-    color: var(--ink);
-    font-family: var(--font-mono);
-    font-size: 0.875rem;
-    resize: vertical;
+    width: 100%; padding: 0.625rem 0.875rem;
+    background: var(--paper-2); border: 1px solid var(--rule);
+    color: var(--ink); font-family: var(--font-mono); font-size: 0.875rem;
+    outline: none;
   }
-  .hint { font-size: 11px; color: var(--muted); margin-top: 0.75rem; }
+  .io:focus { border-color: var(--accent); }
+  .row { margin: 0.6rem 0 1rem; display: flex; gap: 0.4rem; flex-wrap: wrap; }
+  .chip { background: var(--paper-2); border: 1px solid var(--rule); color: var(--ink); font-family: var(--font-mono); font-size: 0.75rem; padding: 0.25rem 0.65rem; cursor: pointer; }
+  .chip:hover, .chip.active { border-color: var(--accent); color: var(--accent); }
+  .status-msg { font-family: var(--font-mono); font-size: 0.8125rem; min-height: 1.2rem; margin: 0.4rem 0 1rem; color: var(--muted); }
+  .list { border-top: 1px solid var(--rule); }
+  .item { display: grid; grid-template-columns: 4rem 1fr; gap: 1rem; padding: 0.75rem 0; border-bottom: 1px solid var(--rule); align-items: baseline; }
+  .item .code { font-family: var(--font-mono); font-weight: 600; color: var(--accent); }
+  .item .name { font-weight: 600; }
+  .item .desc { color: var(--muted); font-size: 0.875rem; line-height: 1.5; margin: 0.25rem 0 0; grid-column: 2; }
 </style>
+
+<script>
+  const CODES: { code: number; name: string; desc: string }[] = [
+    { code: 100, name: 'Continue', desc: 'Server received request headers; client should proceed with the request body.' },
+    { code: 101, name: 'Switching Protocols', desc: 'Server agrees to switch protocols per the Upgrade header.' },
+    { code: 102, name: 'Processing (WebDAV)', desc: 'Server has accepted the request but has not yet completed it.' },
+    { code: 103, name: 'Early Hints', desc: 'Used to return some response headers before the final response.' },
+    { code: 200, name: 'OK', desc: 'Standard success response.' },
+    { code: 201, name: 'Created', desc: 'Request succeeded and a new resource was created.' },
+    { code: 202, name: 'Accepted', desc: 'Request accepted for processing but not yet acted on.' },
+    { code: 203, name: 'Non-Authoritative Information', desc: 'Returned metadata from a transforming proxy.' },
+    { code: 204, name: 'No Content', desc: 'Success with no response body.' },
+    { code: 205, name: 'Reset Content', desc: 'Client should reset the document view that sent the request.' },
+    { code: 206, name: 'Partial Content', desc: 'Server delivered partial content (range request).' },
+    { code: 207, name: 'Multi-Status (WebDAV)', desc: 'Multiple status codes for multiple operations.' },
+    { code: 300, name: 'Multiple Choices', desc: 'Multiple options for the resource; client should choose one.' },
+    { code: 301, name: 'Moved Permanently', desc: 'Resource has been moved to a new URL permanently.' },
+    { code: 302, name: 'Found', desc: 'Resource temporarily under a different URL.' },
+    { code: 303, name: 'See Other', desc: 'Redirect; client should fetch the new URL with GET.' },
+    { code: 304, name: 'Not Modified', desc: 'Cached version is still valid; client may reuse it.' },
+    { code: 307, name: 'Temporary Redirect', desc: 'Like 302 but client must use the same method.' },
+    { code: 308, name: 'Permanent Redirect', desc: 'Like 301 but client must use the same method.' },
+    { code: 400, name: 'Bad Request', desc: 'Server cannot or will not process the request due to client error.' },
+    { code: 401, name: 'Unauthorized', desc: 'Authentication is required and has failed or not been provided.' },
+    { code: 402, name: 'Payment Required', desc: 'Reserved for future use; sometimes used for paid-API rate gating.' },
+    { code: 403, name: 'Forbidden', desc: 'Server understood the request but refuses to authorize it.' },
+    { code: 404, name: 'Not Found', desc: 'Requested resource could not be found.' },
+    { code: 405, name: 'Method Not Allowed', desc: 'Request method is not supported for the target resource.' },
+    { code: 406, name: 'Not Acceptable', desc: 'Resource cannot generate content acceptable per Accept headers.' },
+    { code: 407, name: 'Proxy Authentication Required', desc: 'Client must authenticate with the proxy first.' },
+    { code: 408, name: 'Request Timeout', desc: 'Server timed out waiting for the request.' },
+    { code: 409, name: 'Conflict', desc: 'Request conflicts with the current state of the target resource.' },
+    { code: 410, name: 'Gone', desc: 'Resource is no longer available and will not be available again.' },
+    { code: 411, name: 'Length Required', desc: 'Server requires the Content-Length header.' },
+    { code: 412, name: 'Precondition Failed', desc: 'Preconditions in request headers are not met.' },
+    { code: 413, name: 'Content Too Large', desc: 'Request body is larger than server is willing to process.' },
+    { code: 414, name: 'URI Too Long', desc: 'URI is longer than server is willing to interpret.' },
+    { code: 415, name: 'Unsupported Media Type', desc: 'Request body media type is not supported.' },
+    { code: 416, name: 'Range Not Satisfiable', desc: 'Requested range cannot be satisfied for the target resource.' },
+    { code: 417, name: 'Expectation Failed', desc: 'Server cannot meet the Expect request-header.' },
+    { code: 418, name: "I'm a teapot", desc: 'RFC 2324 April Fools joke; still in use as a friendly error.' },
+    { code: 422, name: 'Unprocessable Content', desc: 'Request was well-formed but semantically erroneous.' },
+    { code: 425, name: 'Too Early', desc: 'Server is unwilling to risk processing a replayed request.' },
+    { code: 426, name: 'Upgrade Required', desc: 'Client should switch to a different protocol.' },
+    { code: 428, name: 'Precondition Required', desc: 'Origin server requires the request to be conditional.' },
+    { code: 429, name: 'Too Many Requests', desc: 'Client has sent too many requests in a given amount of time.' },
+    { code: 431, name: 'Request Header Fields Too Large', desc: 'Header fields are too large for server to process.' },
+    { code: 451, name: 'Unavailable For Legal Reasons', desc: 'Resource is unavailable due to legal demands.' },
+    { code: 500, name: 'Internal Server Error', desc: 'Server encountered an unexpected condition.' },
+    { code: 501, name: 'Not Implemented', desc: 'Server does not support the functionality required.' },
+    { code: 502, name: 'Bad Gateway', desc: 'Server, acting as a gateway, received an invalid upstream response.' },
+    { code: 503, name: 'Service Unavailable', desc: 'Server is temporarily unable to handle the request.' },
+    { code: 504, name: 'Gateway Timeout', desc: 'Upstream server failed to send a response in time.' },
+    { code: 505, name: 'HTTP Version Not Supported', desc: 'Server does not support the HTTP version of the request.' },
+    { code: 507, name: 'Insufficient Storage (WebDAV)', desc: 'Server cannot store the representation needed.' },
+    { code: 508, name: 'Loop Detected (WebDAV)', desc: 'Server detected an infinite loop while processing.' },
+    { code: 511, name: 'Network Authentication Required', desc: 'Client needs to authenticate to gain network access (captive portal).' },
+  ];
+
+  const listEl = document.getElementById('hs-list')!;
+  const inEl = document.getElementById('hs-in') as HTMLInputElement;
+  const countEl = document.getElementById('hs-count')!;
+  let activeFilter = '';
+
+  function escapeHtml(s: string): string {
+    return s.replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
+  }
+  function render() {
+    const q = inEl.value.trim().toLowerCase();
+    const items = CODES.filter(c => {
+      if (activeFilter) {
+        const cls = Math.floor(c.code / 100);
+        if (`${cls}xx` !== activeFilter) return false;
+      }
+      if (!q) return true;
+      return String(c.code).includes(q) || c.name.toLowerCase().includes(q) || c.desc.toLowerCase().includes(q);
+    });
+    listEl.innerHTML = items.map(c => `
+      <div class="item c${Math.floor(c.code/100)}">
+        <span class="code">${c.code}</span>
+        <span class="name">${escapeHtml(c.name)}</span>
+        <span class="desc">${escapeHtml(c.desc)}</span>
+      </div>
+    `).join('');
+    countEl.textContent = `${items.length} of ${CODES.length} codes`;
+  }
+  inEl.addEventListener('input', render);
+  document.querySelectorAll<HTMLButtonElement>('.chip').forEach(b => {
+    b.addEventListener('click', () => {
+      activeFilter = b.dataset.filter!;
+      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      if (activeFilter) b.classList.add('active');
+      render();
+    });
+  });
+  render();
+</script>

@@ -1,15 +1,31 @@
 ---
 import BaseLayout from '~/layouts/BaseLayout.astro'
 ---
-<BaseLayout title="URL encode / decode — Oriz Dev Tools" description="URL encode / decode — runs in your browser. Part of Oriz Dev Tools.">
+<BaseLayout title="URL encode / decode — Oriz Dev Tools" description="URL encode / decode + URL parser. Runs in your browser.">
   <article class="tool">
     <p class="back mono"><a href="/">← all tools</a></p>
     <h1 class="h1">URL encode / decode</h1>
-    <p class="status mono">coming · v0.1</p>
-    <p class="lede">
-      This feature is on the v0.1 roadmap. The page exists so we can iterate on
-      the design and copy in parallel; the implementation lands next sprint.
-    </p>
+    <p class="status mono ready">ready · v0.1</p>
+    <p class="lede">Percent-encode arbitrary text for use in a URL, or decode an existing URL. Also parses a full URL into its parts.</p>
+
+    <div class="row">
+      <label class="mono"><input type="radio" name="mode" value="encode" checked /> encode</label>
+      <label class="mono"><input type="radio" name="mode" value="decode" /> decode</label>
+      <label class="mono"><input type="radio" name="mode" value="parse" /> parse</label>
+      <label class="mono"><input type="checkbox" id="component" checked /> encodeURIComponent (vs encodeURI)</label>
+    </div>
+
+    <label class="label" for="u-in">Input</label>
+    <textarea id="u-in" class="io" rows="6" placeholder="https://example.com/path?q=hello world"></textarea>
+
+    <div class="actions">
+      <button class="btn" id="u-run">Run</button>
+      <button class="btn secondary" id="u-copy">Copy output</button>
+    </div>
+    <div id="u-status" class="status-msg" aria-live="polite"></div>
+
+    <label class="label" for="u-out">Output</label>
+    <pre id="u-out" class="output" aria-live="polite"></pre>
   </article>
 </BaseLayout>
 
@@ -21,18 +37,80 @@ import BaseLayout from '~/layouts/BaseLayout.astro'
   .h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.75rem, 4vw, 2.5rem); margin: 0 0 0.5rem; line-height: 1.1; }
   .status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 2rem; }
   .status.ready { color: var(--accent); }
-  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 56ch; }
-  .placeholder { max-width: 60ch; }
-  .placeholder p { color: var(--muted); margin: 0 0 1rem; }
-  .io {
-    width: 100%;
-    padding: 1rem;
-    background: var(--paper-2);
-    border: 1px solid var(--rule);
-    color: var(--ink);
-    font-family: var(--font-mono);
-    font-size: 0.875rem;
-    resize: vertical;
+  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 56ch; margin-bottom: 1.5rem; }
+  .row { display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; font-size: 0.875rem; color: var(--muted); }
+  .label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 0.4rem; letter-spacing: 0.05em; }
+  .io, .output {
+    width: 100%; padding: 0.875rem 1rem;
+    background: var(--paper-2); border: 1px solid var(--rule);
+    color: var(--ink); font-family: var(--font-mono); font-size: 0.875rem;
+    resize: vertical; outline: none;
   }
-  .hint { font-size: 11px; color: var(--muted); margin-top: 0.75rem; }
+  .io:focus { border-color: var(--accent); }
+  .output { white-space: pre-wrap; word-break: break-all; min-height: 4rem; margin: 0; }
+  .actions { display: flex; gap: 0.5rem; margin: 0.75rem 0; flex-wrap: wrap; }
+  .btn { padding: 0.4rem 1rem; background: var(--accent); color: var(--paper); border: none; font-family: var(--font-mono); font-size: 0.8125rem; font-weight: 600; cursor: pointer; letter-spacing: 0.03em; }
+  .btn:hover { opacity: 0.85; }
+  .btn.secondary { background: var(--paper-2); color: var(--ink); border: 1px solid var(--rule); }
+  .status-msg { font-family: var(--font-mono); font-size: 0.8125rem; min-height: 1.4rem; margin: 0.25rem 0 0.75rem; }
+  .status-msg.ok { color: var(--accent); }
+  .status-msg.err { color: #c1440e; font-weight: 600; }
 </style>
+
+<script>
+  const inEl = document.getElementById('u-in') as HTMLTextAreaElement;
+  const outEl = document.getElementById('u-out') as HTMLPreElement;
+  const statusEl = document.getElementById('u-status') as HTMLElement;
+  const compEl = document.getElementById('component') as HTMLInputElement;
+
+  function getMode(): string {
+    return (document.querySelector('input[name="mode"]:checked') as HTMLInputElement).value;
+  }
+  function setStatus(msg: string, ok: boolean) {
+    statusEl.textContent = msg;
+    statusEl.className = 'status-msg ' + (ok ? 'ok' : 'err');
+  }
+  function run() {
+    const v = inEl.value;
+    if (!v) { outEl.textContent = ''; setStatus('', true); return; }
+    try {
+      const m = getMode();
+      if (m === 'encode') {
+        outEl.textContent = compEl.checked ? encodeURIComponent(v) : encodeURI(v);
+        setStatus('✓ encoded', true);
+      } else if (m === 'decode') {
+        outEl.textContent = compEl.checked ? decodeURIComponent(v) : decodeURI(v);
+        setStatus('✓ decoded', true);
+      } else {
+        const u = new URL(v.trim());
+        const params: string[] = [];
+        u.searchParams.forEach((val, key) => params.push(`  ${key} = ${val}`));
+        const parts = [
+          `protocol: ${u.protocol}`,
+          `host:     ${u.host}`,
+          `hostname: ${u.hostname}`,
+          `port:     ${u.port || '(default)'}`,
+          `pathname: ${u.pathname}`,
+          `search:   ${u.search}`,
+          `hash:     ${u.hash}`,
+          `origin:   ${u.origin}`,
+          ``,
+          `query params:`,
+          ...(params.length ? params : ['  (none)']),
+        ];
+        outEl.textContent = parts.join('\n');
+        setStatus(`✓ parsed · ${params.length} params`, true);
+      }
+    } catch (e) {
+      outEl.textContent = '';
+      setStatus('✗ ' + (e as Error).message, false);
+    }
+  }
+  document.getElementById('u-run')!.addEventListener('click', run);
+  inEl.addEventListener('input', run);
+  document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener('change', run));
+  compEl.addEventListener('change', run);
+  document.getElementById('u-copy')!.addEventListener('click', () => {
+    if (outEl.textContent) navigator.clipboard.writeText(outEl.textContent);
+  });
+</script>

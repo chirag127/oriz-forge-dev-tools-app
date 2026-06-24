@@ -1,15 +1,30 @@
 ---
 import BaseLayout from '~/layouts/BaseLayout.astro'
 ---
-<BaseLayout title="cron builder — Oriz Dev Tools" description="cron builder — runs in your browser. Part of Oriz Dev Tools.">
+<BaseLayout title="cron builder — Oriz Dev Tools" description="Build and explain cron expressions. Previews the next 5 run times. Runs in your browser.">
   <article class="tool">
     <p class="back mono"><a href="/">← all tools</a></p>
     <h1 class="h1">cron builder</h1>
-    <p class="status mono">coming · v0.1</p>
-    <p class="lede">
-      This feature is on the v0.1 roadmap. The page exists so we can iterate on
-      the design and copy in parallel; the implementation lands next sprint.
-    </p>
+    <p class="status mono ready">ready · v0.1</p>
+    <p class="lede">Parse a 5-field standard cron expression, get a human-readable description, and preview the next 5 run times.</p>
+
+    <label class="label" for="c-in">cron expression (min hour day-of-month month day-of-week)</label>
+    <input id="c-in" class="io" value="*/15 9-17 * * 1-5" autocomplete="off" />
+    <div class="hints mono">
+      Quick: <button class="chip" data-cron="0 * * * *">hourly</button>
+      <button class="chip" data-cron="0 9 * * *">daily 9am</button>
+      <button class="chip" data-cron="0 9 * * 1-5">weekdays 9am</button>
+      <button class="chip" data-cron="0 0 1 * *">monthly</button>
+      <button class="chip" data-cron="*/5 * * * *">every 5 min</button>
+    </div>
+
+    <div id="c-status" class="status-msg" aria-live="polite"></div>
+
+    <h2 class="h2">Description</h2>
+    <pre id="c-desc" class="output" aria-live="polite"></pre>
+
+    <h2 class="h2">Next 5 runs (local time)</h2>
+    <pre id="c-runs" class="output" aria-live="polite"></pre>
   </article>
 </BaseLayout>
 
@@ -19,20 +34,141 @@ import BaseLayout from '~/layouts/BaseLayout.astro'
   .back a { color: var(--muted); text-decoration: none; }
   .back a:hover { color: var(--ink); }
   .h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.75rem, 4vw, 2.5rem); margin: 0 0 0.5rem; line-height: 1.1; }
+  .h2 { font-family: var(--font-display); font-weight: 600; font-size: 1.125rem; margin: 1.5rem 0 0.5rem; }
   .status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 2rem; }
   .status.ready { color: var(--accent); }
-  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 56ch; }
-  .placeholder { max-width: 60ch; }
-  .placeholder p { color: var(--muted); margin: 0 0 1rem; }
-  .io {
-    width: 100%;
-    padding: 1rem;
-    background: var(--paper-2);
-    border: 1px solid var(--rule);
-    color: var(--ink);
-    font-family: var(--font-mono);
-    font-size: 0.875rem;
-    resize: vertical;
+  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 56ch; margin-bottom: 1.5rem; }
+  .label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 0.4rem; letter-spacing: 0.05em; }
+  .io, .output {
+    width: 100%; padding: 0.625rem 0.875rem;
+    background: var(--paper-2); border: 1px solid var(--rule);
+    color: var(--ink); font-family: var(--font-mono); font-size: 0.875rem;
+    outline: none;
   }
-  .hint { font-size: 11px; color: var(--muted); margin-top: 0.75rem; }
+  .io:focus { border-color: var(--accent); }
+  .output { white-space: pre-wrap; min-height: 3rem; margin: 0; padding: 0.875rem 1rem; }
+  .hints { margin: 0.6rem 0 1rem; display: flex; gap: 0.4rem; flex-wrap: wrap; font-size: 0.75rem; align-items: center; color: var(--muted); }
+  .chip { background: var(--paper-2); border: 1px solid var(--rule); color: var(--ink); font-family: var(--font-mono); font-size: 0.75rem; padding: 0.2rem 0.55rem; cursor: pointer; }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  .status-msg { font-family: var(--font-mono); font-size: 0.8125rem; min-height: 1.4rem; margin: 0.5rem 0; }
+  .status-msg.ok { color: var(--accent); }
+  .status-msg.err { color: #c1440e; font-weight: 600; }
 </style>
+
+<script>
+  type Field = { all: boolean; vals: Set<number>; };
+
+  function parseField(s: string, min: number, max: number): Field {
+    const vals = new Set<number>();
+    if (s === '*') return { all: true, vals };
+    for (const part of s.split(',')) {
+      let step = 1;
+      let range = part;
+      if (part.includes('/')) {
+        const [r, st] = part.split('/');
+        step = parseInt(st, 10);
+        if (Number.isNaN(step) || step < 1) throw new Error(`invalid step in "${part}"`);
+        range = r;
+      }
+      let lo: number, hi: number;
+      if (range === '*') { lo = min; hi = max; }
+      else if (range.includes('-')) {
+        const [a, b] = range.split('-').map(x => parseInt(x, 10));
+        lo = a; hi = b;
+      } else {
+        lo = hi = parseInt(range, 10);
+      }
+      if (Number.isNaN(lo) || Number.isNaN(hi)) throw new Error(`invalid value "${part}"`);
+      if (lo < min || hi > max || lo > hi) throw new Error(`out of range "${part}" (expected ${min}-${max})`);
+      for (let v = lo; v <= hi; v += step) vals.add(v);
+    }
+    return { all: false, vals };
+  }
+
+  function parseCron(expr: string) {
+    const parts = expr.trim().split(/\s+/);
+    if (parts.length !== 5) throw new Error('expected 5 fields, got ' + parts.length);
+    return {
+      minute: parseField(parts[0], 0, 59),
+      hour: parseField(parts[1], 0, 23),
+      dom: parseField(parts[2], 1, 31),
+      month: parseField(parts[3], 1, 12),
+      dow: parseField(parts[4].replace(/7/g, '0'), 0, 6),
+      raw: parts,
+    };
+  }
+
+  function describeField(f: Field, names?: string[]): string {
+    if (f.all) return 'every';
+    const arr = [...f.vals].sort((a, b) => a - b);
+    if (names) return arr.map(v => names[v]).join(', ');
+    return arr.join(', ');
+  }
+  const MONTHS = ['', 'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const DOWS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  function describe(c: ReturnType<typeof parseCron>): string {
+    const min = c.minute.all ? 'every minute' : `at minute ${describeField(c.minute)}`;
+    const hr = c.hour.all ? '' : ` of hour ${describeField(c.hour)}`;
+    const dom = c.dom.all ? '' : ` on day-of-month ${describeField(c.dom)}`;
+    const mon = c.month.all ? '' : ` in ${describeField(c.month, MONTHS)}`;
+    const dow = c.dow.all ? '' : ` on ${describeField(c.dow, DOWS)}`;
+    return `${min}${hr}${dom}${mon}${dow}`;
+  }
+
+  function matches(c: ReturnType<typeof parseCron>, d: Date): boolean {
+    if (!c.minute.all && !c.minute.vals.has(d.getMinutes())) return false;
+    if (!c.hour.all && !c.hour.vals.has(d.getHours())) return false;
+    if (!c.month.all && !c.month.vals.has(d.getMonth() + 1)) return false;
+    const domR = !c.dom.all, dowR = !c.dow.all;
+    const domHit = c.dom.vals.has(d.getDate());
+    const dowHit = c.dow.vals.has(d.getDay());
+    if (domR && dowR) return domHit || dowHit;
+    if (domR) return domHit;
+    if (dowR) return dowHit;
+    return true;
+  }
+
+  function nextRuns(c: ReturnType<typeof parseCron>, n: number): Date[] {
+    const out: Date[] = [];
+    const start = new Date();
+    start.setSeconds(0, 0);
+    start.setMinutes(start.getMinutes() + 1);
+    const cur = new Date(start);
+    const limit = 60 * 24 * 366 * 2;
+    let iter = 0;
+    while (out.length < n && iter < limit) {
+      if (matches(c, cur)) out.push(new Date(cur));
+      cur.setMinutes(cur.getMinutes() + 1);
+      iter++;
+    }
+    return out;
+  }
+
+  const inEl = document.getElementById('c-in') as HTMLInputElement;
+  const statusEl = document.getElementById('c-status') as HTMLElement;
+  const descEl = document.getElementById('c-desc') as HTMLPreElement;
+  const runsEl = document.getElementById('c-runs') as HTMLPreElement;
+
+  function setStatus(msg: string, ok: boolean) {
+    statusEl.textContent = msg;
+    statusEl.className = 'status-msg ' + (ok ? 'ok' : 'err');
+  }
+  function run() {
+    try {
+      const c = parseCron(inEl.value);
+      descEl.textContent = describe(c);
+      runsEl.textContent = nextRuns(c, 5).map(d => d.toString()).join('\n') || '(none in next 2 years)';
+      setStatus('✓ valid cron', true);
+    } catch (e) {
+      descEl.textContent = '';
+      runsEl.textContent = '';
+      setStatus('✗ ' + (e as Error).message, false);
+    }
+  }
+  inEl.addEventListener('input', run);
+  document.querySelectorAll<HTMLButtonElement>('.chip').forEach(b => {
+    b.addEventListener('click', () => { inEl.value = b.dataset.cron!; run(); });
+  });
+  run();
+</script>

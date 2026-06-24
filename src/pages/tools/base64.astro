@@ -5,11 +5,27 @@ import BaseLayout from '~/layouts/BaseLayout.astro'
   <article class="tool">
     <p class="back mono"><a href="/">← all tools</a></p>
     <h1 class="h1">Base64 encode / decode</h1>
-    <p class="status mono">coming · v0.1</p>
-    <p class="lede">
-      This feature is on the v0.1 roadmap. The page exists so we can iterate on
-      the design and copy in parallel; the implementation lands next sprint.
-    </p>
+    <p class="status mono ready">ready · v0.1</p>
+    <p class="lede">Encode arbitrary UTF-8 text to base64, or decode base64 back. Runs locally in your browser — nothing is uploaded.</p>
+
+    <div class="row">
+      <label class="mono"><input type="radio" name="mode" value="encode" checked /> encode</label>
+      <label class="mono"><input type="radio" name="mode" value="decode" /> decode</label>
+      <label class="mono"><input type="checkbox" id="urlsafe" /> URL-safe</label>
+    </div>
+
+    <label class="label" for="b64-in">Input</label>
+    <textarea id="b64-in" class="io" rows="8" placeholder="Type or paste here…"></textarea>
+
+    <div class="actions">
+      <button class="btn" id="b64-run">Run</button>
+      <button class="btn secondary" id="b64-copy">Copy output</button>
+      <button class="btn secondary" id="b64-swap">Swap ↑↓</button>
+    </div>
+    <div id="b64-status" class="status-msg" aria-live="polite"></div>
+
+    <label class="label" for="b64-out">Output</label>
+    <pre id="b64-out" class="output" aria-live="polite"></pre>
   </article>
 </BaseLayout>
 
@@ -21,18 +37,84 @@ import BaseLayout from '~/layouts/BaseLayout.astro'
   .h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.75rem, 4vw, 2.5rem); margin: 0 0 0.5rem; line-height: 1.1; }
   .status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 2rem; }
   .status.ready { color: var(--accent); }
-  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 56ch; }
-  .placeholder { max-width: 60ch; }
-  .placeholder p { color: var(--muted); margin: 0 0 1rem; }
-  .io {
-    width: 100%;
-    padding: 1rem;
-    background: var(--paper-2);
-    border: 1px solid var(--rule);
-    color: var(--ink);
-    font-family: var(--font-mono);
-    font-size: 0.875rem;
-    resize: vertical;
+  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 56ch; margin-bottom: 1.5rem; }
+  .row { display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; font-size: 0.875rem; color: var(--muted); }
+  .label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 0.4rem; letter-spacing: 0.05em; }
+  .io, .output {
+    width: 100%; padding: 0.875rem 1rem;
+    background: var(--paper-2); border: 1px solid var(--rule);
+    color: var(--ink); font-family: var(--font-mono); font-size: 0.875rem;
+    resize: vertical; outline: none;
   }
-  .hint { font-size: 11px; color: var(--muted); margin-top: 0.75rem; }
+  .io:focus { border-color: var(--accent); }
+  .output { white-space: pre-wrap; word-break: break-all; min-height: 4rem; margin: 0; }
+  .actions { display: flex; gap: 0.5rem; margin: 0.75rem 0; flex-wrap: wrap; }
+  .btn { padding: 0.4rem 1rem; background: var(--accent); color: var(--paper); border: none; font-family: var(--font-mono); font-size: 0.8125rem; font-weight: 600; cursor: pointer; letter-spacing: 0.03em; }
+  .btn:hover { opacity: 0.85; }
+  .btn.secondary { background: var(--paper-2); color: var(--ink); border: 1px solid var(--rule); }
+  .status-msg { font-family: var(--font-mono); font-size: 0.8125rem; min-height: 1.4rem; margin: 0.25rem 0 0.75rem; }
+  .status-msg.ok { color: var(--accent); }
+  .status-msg.err { color: #c1440e; font-weight: 600; }
 </style>
+
+<script>
+  const inEl = document.getElementById('b64-in') as HTMLTextAreaElement;
+  const outEl = document.getElementById('b64-out') as HTMLPreElement;
+  const statusEl = document.getElementById('b64-status') as HTMLElement;
+  const urlSafeEl = document.getElementById('urlsafe') as HTMLInputElement;
+
+  function getMode(): 'encode' | 'decode' {
+    const v = (document.querySelector('input[name="mode"]:checked') as HTMLInputElement)?.value;
+    return v === 'decode' ? 'decode' : 'encode';
+  }
+  function setStatus(msg: string, ok: boolean) {
+    statusEl.textContent = msg;
+    statusEl.className = 'status-msg ' + (ok ? 'ok' : 'err');
+  }
+  function encode(s: string, urlSafe: boolean): string {
+    const bytes = new TextEncoder().encode(s);
+    let bin = '';
+    for (const b of bytes) bin += String.fromCharCode(b);
+    let out = btoa(bin);
+    if (urlSafe) out = out.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return out;
+  }
+  function decode(s: string, urlSafe: boolean): string {
+    let v = s.trim();
+    if (urlSafe) {
+      v = v.replace(/-/g, '+').replace(/_/g, '/');
+      while (v.length % 4) v += '=';
+    }
+    const bin = atob(v);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+  }
+  function run() {
+    const v = inEl.value;
+    if (!v) { outEl.textContent = ''; setStatus('', true); return; }
+    try {
+      const mode = getMode();
+      const result = mode === 'encode' ? encode(v, urlSafeEl.checked) : decode(v, urlSafeEl.checked);
+      outEl.textContent = result;
+      setStatus(`✓ ${mode}d · ${result.length} chars`, true);
+    } catch (e) {
+      outEl.textContent = '';
+      setStatus('✗ ' + (e as Error).message, false);
+    }
+  }
+  document.getElementById('b64-run')!.addEventListener('click', run);
+  inEl.addEventListener('input', run);
+  document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener('change', run));
+  urlSafeEl.addEventListener('change', run);
+  document.getElementById('b64-copy')!.addEventListener('click', () => {
+    if (outEl.textContent) navigator.clipboard.writeText(outEl.textContent);
+  });
+  document.getElementById('b64-swap')!.addEventListener('click', () => {
+    if (!outEl.textContent) return;
+    inEl.value = outEl.textContent;
+    const next = getMode() === 'encode' ? 'decode' : 'encode';
+    (document.querySelector(`input[name="mode"][value="${next}"]`) as HTMLInputElement).checked = true;
+    run();
+  });
+</script>

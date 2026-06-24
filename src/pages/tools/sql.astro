@@ -1,15 +1,37 @@
 ---
 import BaseLayout from '~/layouts/BaseLayout.astro'
 ---
-<BaseLayout title="SQL formatter — Oriz Dev Tools" description="SQL formatter — runs in your browser. Part of Oriz Dev Tools.">
+<BaseLayout title="SQL formatter — Oriz Dev Tools" description="Pretty-print and minify SQL. Runs in your browser.">
   <article class="tool">
     <p class="back mono"><a href="/">← all tools</a></p>
     <h1 class="h1">SQL formatter</h1>
-    <p class="status mono">coming · v0.1</p>
-    <p class="lede">
-      This feature is on the v0.1 roadmap. The page exists so we can iterate on
-      the design and copy in parallel; the implementation lands next sprint.
-    </p>
+    <p class="status mono ready">ready · v0.1</p>
+    <p class="lede">Pretty-print or minify SQL statements. A pragmatic, keyword-aware formatter — not a full parser. Best for SELECT/INSERT/UPDATE/DELETE / DDL.</p>
+
+    <div class="row">
+      <label class="mono"><input type="radio" name="mode" value="format" checked /> format</label>
+      <label class="mono"><input type="radio" name="mode" value="minify" /> minify</label>
+      <label class="mono">indent
+        <select id="indent" class="select">
+          <option value="2">2 spaces</option>
+          <option value="4" selected>4 spaces</option>
+          <option value="tab">tab</option>
+        </select>
+      </label>
+      <label class="mono"><input type="checkbox" id="upper" checked /> uppercase keywords</label>
+    </div>
+
+    <label class="label" for="s-in">SQL input</label>
+    <textarea id="s-in" class="io" rows="10" placeholder="select id, name from users where active = 1 order by name"></textarea>
+
+    <div class="actions">
+      <button class="btn" id="s-run">Run</button>
+      <button class="btn secondary" id="s-copy">Copy output</button>
+    </div>
+    <div id="s-status" class="status-msg" aria-live="polite"></div>
+
+    <label class="label" for="s-out">Output</label>
+    <pre id="s-out" class="output" aria-live="polite"></pre>
   </article>
 </BaseLayout>
 
@@ -21,18 +43,133 @@ import BaseLayout from '~/layouts/BaseLayout.astro'
   .h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.75rem, 4vw, 2.5rem); margin: 0 0 0.5rem; line-height: 1.1; }
   .status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 2rem; }
   .status.ready { color: var(--accent); }
-  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 56ch; }
-  .placeholder { max-width: 60ch; }
-  .placeholder p { color: var(--muted); margin: 0 0 1rem; }
-  .io {
-    width: 100%;
-    padding: 1rem;
-    background: var(--paper-2);
-    border: 1px solid var(--rule);
-    color: var(--ink);
-    font-family: var(--font-mono);
-    font-size: 0.875rem;
-    resize: vertical;
+  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 56ch; margin-bottom: 1.5rem; }
+  .row { display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; font-size: 0.875rem; color: var(--muted); align-items: center; }
+  .label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 0.4rem; letter-spacing: 0.05em; }
+  .select { background: var(--paper-2); border: 1px solid var(--rule); color: var(--ink); font-family: var(--font-mono); padding: 0.25rem 0.5rem; margin-left: 0.4rem; }
+  .io, .output {
+    width: 100%; padding: 0.875rem 1rem;
+    background: var(--paper-2); border: 1px solid var(--rule);
+    color: var(--ink); font-family: var(--font-mono); font-size: 0.875rem;
+    resize: vertical; outline: none;
   }
-  .hint { font-size: 11px; color: var(--muted); margin-top: 0.75rem; }
+  .io:focus { border-color: var(--accent); }
+  .output { white-space: pre; overflow-x: auto; min-height: 4rem; margin: 0; }
+  .actions { display: flex; gap: 0.5rem; margin: 0.75rem 0; flex-wrap: wrap; }
+  .btn { padding: 0.4rem 1rem; background: var(--accent); color: var(--paper); border: none; font-family: var(--font-mono); font-size: 0.8125rem; font-weight: 600; cursor: pointer; letter-spacing: 0.03em; }
+  .btn:hover { opacity: 0.85; }
+  .btn.secondary { background: var(--paper-2); color: var(--ink); border: 1px solid var(--rule); }
+  .status-msg { font-family: var(--font-mono); font-size: 0.8125rem; min-height: 1.4rem; margin: 0.25rem 0 0.75rem; }
+  .status-msg.ok { color: var(--accent); }
+  .status-msg.err { color: #c1440e; font-weight: 600; }
 </style>
+
+<script>
+  const KEYWORDS = new Set([
+    'select','from','where','and','or','not','in','is','null','like','between',
+    'order','by','group','having','limit','offset','join','inner','outer','left',
+    'right','full','cross','on','as','union','intersect','except','all','distinct',
+    'insert','into','values','update','set','delete','create','table','alter','drop',
+    'index','view','if','exists','primary','key','foreign','references','default',
+    'constraint','unique','check','case','when','then','else','end','with','returning',
+    'asc','desc','using','natural'
+  ]);
+  const NEWLINE_BEFORE = new Set([
+    'select','from','where','group','order','having','limit','offset','union','intersect',
+    'except','values','set','returning','with','left','right','inner','outer','full','cross','join','on'
+  ]);
+
+  function tokenize(sql: string): string[] {
+    const tokens: string[] = [];
+    let i = 0;
+    while (i < sql.length) {
+      const c = sql[i];
+      if (/\s/.test(c)) { i++; continue; }
+      if (c === "'" || c === '"') {
+        let j = i + 1;
+        while (j < sql.length && sql[j] !== c) { if (sql[j] === '\\') j++; j++; }
+        tokens.push(sql.slice(i, j + 1)); i = j + 1; continue;
+      }
+      if (c === '-' && sql[i+1] === '-') {
+        const nl = sql.indexOf('\n', i);
+        tokens.push(sql.slice(i, nl === -1 ? sql.length : nl));
+        i = nl === -1 ? sql.length : nl + 1; continue;
+      }
+      if (c === '/' && sql[i+1] === '*') {
+        const end = sql.indexOf('*/', i+2);
+        tokens.push(sql.slice(i, end === -1 ? sql.length : end + 2));
+        i = end === -1 ? sql.length : end + 2; continue;
+      }
+      if (/[(),;]/.test(c)) { tokens.push(c); i++; continue; }
+      let j = i;
+      while (j < sql.length && !/[\s(),;'"]/.test(sql[j])) j++;
+      tokens.push(sql.slice(i, j)); i = j;
+    }
+    return tokens;
+  }
+
+  function format(sql: string, indent: string, upper: boolean): string {
+    const tokens = tokenize(sql);
+    let out = '';
+    let depth = 0;
+    let firstToken = true;
+    for (let i = 0; i < tokens.length; i++) {
+      const t = tokens[i];
+      const low = t.toLowerCase();
+      const isKw = KEYWORDS.has(low);
+      const disp = isKw && upper ? t.toUpperCase() : (isKw ? low : t);
+      if (t === '(') { out += '('; depth++; continue; }
+      if (t === ')') { depth--; out += ')'; continue; }
+      if (t === ',') { out += ',\n' + indent.repeat(Math.max(depth, 1)); continue; }
+      if (t === ';') { out += ';\n'; continue; }
+      if (NEWLINE_BEFORE.has(low) && !firstToken) {
+        out = out.replace(/\s+$/, '') + '\n' + indent.repeat(depth) + disp + ' ';
+      } else {
+        out += disp + ' ';
+      }
+      firstToken = false;
+    }
+    return out.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+  function minify(sql: string): string {
+    return tokenize(sql).join(' ')
+      .replace(/\s*([,;()])\s*/g, '$1')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  const inEl = document.getElementById('s-in') as HTMLTextAreaElement;
+  const outEl = document.getElementById('s-out') as HTMLPreElement;
+  const statusEl = document.getElementById('s-status') as HTMLElement;
+  const indentEl = document.getElementById('indent') as HTMLSelectElement;
+  const upperEl = document.getElementById('upper') as HTMLInputElement;
+
+  function setStatus(msg: string, ok: boolean) {
+    statusEl.textContent = msg;
+    statusEl.className = 'status-msg ' + (ok ? 'ok' : 'err');
+  }
+  function getMode(): string {
+    return (document.querySelector('input[name="mode"]:checked') as HTMLInputElement).value;
+  }
+  function run() {
+    const v = inEl.value;
+    if (!v.trim()) { outEl.textContent = ''; setStatus('', true); return; }
+    try {
+      const indentVal = indentEl.value === 'tab' ? '\t' : ' '.repeat(parseInt(indentEl.value, 10));
+      const result = getMode() === 'minify' ? minify(v) : format(v, indentVal, upperEl.checked);
+      outEl.textContent = result;
+      setStatus(`✓ ${getMode()}ted · ${result.length} chars`, true);
+    } catch (e) {
+      outEl.textContent = '';
+      setStatus('✗ ' + (e as Error).message, false);
+    }
+  }
+  document.getElementById('s-run')!.addEventListener('click', run);
+  inEl.addEventListener('input', run);
+  document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener('change', run));
+  indentEl.addEventListener('change', run);
+  upperEl.addEventListener('change', run);
+  document.getElementById('s-copy')!.addEventListener('click', () => {
+    if (outEl.textContent) navigator.clipboard.writeText(outEl.textContent);
+  });
+</script>

@@ -1,6 +1,7 @@
 ---
 import '~/styles/global.css'
 import { pricingUrl } from '@chirag127/astro-shell/pricing-url'
+import FamilySidebar from '@chirag127/astro-shell/components/FamilySidebar.astro'
 
 interface Props {
   title?: string
@@ -39,7 +40,28 @@ const canonical = new URL(Astro.url.pathname, 'https://dev.oriz.in').toString()
         <a href="https://account.oriz.in/sign-in?return=https://dev.oriz.in/">sign in</a>
       </nav>
     </header>
-    <main id="main"><slot /></main>
+    <div class="oriz-shell">
+      <FamilySidebar slug="oriz-forge-dev-tools-app" title="Dev Tools">
+        <a slot="tools" href="/tools/json/">JSON format / minify / diff</a>
+        <a slot="tools" href="/tools/json-schema/">JSON schema generator</a>
+        <a slot="tools" href="/tools/jwt/">JWT decoder</a>
+        <a slot="tools" href="/tools/base64/">Base64 encode / decode</a>
+        <a slot="tools" href="/tools/url/">URL encode / decode</a>
+        <a slot="tools" href="/tools/html/">HTML entities</a>
+        <a slot="tools" href="/tools/hex-bin/">Hex / binary converters</a>
+        <a slot="tools" href="/tools/regex/">regex tester</a>
+        <a slot="tools" href="/tools/cron/">cron builder</a>
+        <a slot="tools" href="/tools/curl/">curl → fetch</a>
+        <a slot="tools" href="/tools/sql/">SQL formatter</a>
+        <a slot="tools" href="/tools/http-status/">HTTP status codes</a>
+        <a slot="tools" href="/tools/api-tester/">API tester</a>
+        <a slot="tools" href="/tools/timestamp/">Timestamp converter</a>
+        <a slot="tools" href="/tools/color/">Color converter</a>
+        <a slot="tools" href="/tools/minifier/">Minifier</a>
+        <a slot="tools" href="/tools/git-diff/">Git diff viewer</a>
+      </FamilySidebar>
+      <main id="main" class="oriz-main"><slot /></main>
+    </div>
     <style>
       header.site nav a { min-height: 32px; padding: 6px 0; display: inline-flex; align-items: center; }
     </style>

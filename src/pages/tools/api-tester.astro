@@ -1,15 +1,42 @@
 ---
 import BaseLayout from '~/layouts/BaseLayout.astro'
 ---
-<BaseLayout title="API tester (Postman-lite) — Oriz Dev Tools" description="API tester (Postman-lite) — runs in your browser. Part of Oriz Dev Tools.">
+<BaseLayout title="API tester (Postman-lite) — Oriz Dev Tools" description="Send HTTP requests and inspect responses, in your browser. CORS-aware.">
   <article class="tool">
     <p class="back mono"><a href="/">← all tools</a></p>
     <h1 class="h1">API tester (Postman-lite)</h1>
-    <p class="status mono">coming · v0.1</p>
-    <p class="lede">
-      This feature is on the v0.1 roadmap. The page exists so we can iterate on
-      the design and copy in parallel; the implementation lands next sprint.
-    </p>
+    <p class="status mono ready">ready · v0.1</p>
+    <p class="lede">Make HTTP requests directly from your browser. Subject to CORS — for non-CORS-friendly endpoints, configure the target to allow this origin. Nothing is sent to a server beyond the URL you specify.</p>
+
+    <div class="bar">
+      <select id="a-method" class="select">
+        <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option><option>HEAD</option><option>OPTIONS</option>
+      </select>
+      <input id="a-url" class="io url" placeholder="https://httpbin.org/get?x=1" autocomplete="off" />
+      <button class="btn" id="a-send">Send</button>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-tab="headers">Headers</button>
+      <button class="tab" data-tab="body">Body</button>
+    </div>
+    <div class="panel" id="panel-headers">
+      <label class="label" for="a-headers">Headers (one per line, <code>Key: Value</code>)</label>
+      <textarea id="a-headers" class="io" rows="4" placeholder="Accept: application/json"></textarea>
+    </div>
+    <div class="panel hidden" id="panel-body">
+      <label class="label" for="a-body">Body (sent for POST/PUT/PATCH/DELETE)</label>
+      <textarea id="a-body" class="io" rows="6" placeholder='{"hello":"world"}'></textarea>
+    </div>
+
+    <div id="a-status" class="status-msg" aria-live="polite"></div>
+
+    <h2 class="h2">Response</h2>
+    <div id="a-meta" class="meta mono"></div>
+    <label class="label">Headers</label>
+    <pre id="a-rheaders" class="output" aria-live="polite"></pre>
+    <label class="label">Body</label>
+    <pre id="a-rbody" class="output" aria-live="polite"></pre>
   </article>
 </BaseLayout>
 
@@ -19,20 +46,100 @@ import BaseLayout from '~/layouts/BaseLayout.astro'
   .back a { color: var(--muted); text-decoration: none; }
   .back a:hover { color: var(--ink); }
   .h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.75rem, 4vw, 2.5rem); margin: 0 0 0.5rem; line-height: 1.1; }
+  .h2 { font-family: var(--font-display); font-weight: 600; font-size: 1.125rem; margin: 1.5rem 0 0.5rem; }
   .status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 2rem; }
   .status.ready { color: var(--accent); }
-  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 56ch; }
-  .placeholder { max-width: 60ch; }
-  .placeholder p { color: var(--muted); margin: 0 0 1rem; }
-  .io {
-    width: 100%;
-    padding: 1rem;
-    background: var(--paper-2);
-    border: 1px solid var(--rule);
-    color: var(--ink);
-    font-family: var(--font-mono);
-    font-size: 0.875rem;
-    resize: vertical;
+  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 60ch; margin-bottom: 1.5rem; }
+  .bar { display: grid; grid-template-columns: auto 1fr auto; gap: 0.5rem; margin-bottom: 1rem; }
+  @media (max-width: 540px) { .bar { grid-template-columns: 1fr; } }
+  .select { background: var(--paper-2); border: 1px solid var(--rule); color: var(--ink); font-family: var(--font-mono); font-size: 0.8125rem; padding: 0.5rem 0.75rem; }
+  .io, .output {
+    width: 100%; padding: 0.625rem 0.875rem;
+    background: var(--paper-2); border: 1px solid var(--rule);
+    color: var(--ink); font-family: var(--font-mono); font-size: 0.875rem;
+    resize: vertical; outline: none;
   }
-  .hint { font-size: 11px; color: var(--muted); margin-top: 0.75rem; }
+  .io:focus { border-color: var(--accent); }
+  .output { white-space: pre-wrap; word-break: break-all; min-height: 3rem; margin: 0 0 1rem; }
+  .label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 0.4rem; letter-spacing: 0.05em; }
+  .tabs { display: flex; gap: 2px; margin: 1rem 0 0.75rem; border-bottom: 1px solid var(--rule); }
+  .tab { padding: 0.4rem 1rem; background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); font-family: var(--font-mono); font-size: 0.8125rem; cursor: pointer; margin-bottom: -1px; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .panel { margin-bottom: 0.5rem; }
+  .hidden { display: none; }
+  .btn { padding: 0.4rem 1.25rem; background: var(--accent); color: var(--paper); border: none; font-family: var(--font-mono); font-size: 0.8125rem; font-weight: 600; cursor: pointer; letter-spacing: 0.03em; }
+  .btn:hover { opacity: 0.85; }
+  .status-msg { font-family: var(--font-mono); font-size: 0.8125rem; min-height: 1.4rem; margin: 0.5rem 0; }
+  .status-msg.ok { color: var(--accent); }
+  .status-msg.err { color: #c1440e; font-weight: 600; }
+  .meta { font-size: 0.8125rem; color: var(--muted); margin: 0.5rem 0; display: flex; gap: 1rem; flex-wrap: wrap; }
+  .meta .ok { color: var(--accent); font-weight: 600; }
+  .meta .err { color: #c1440e; font-weight: 600; }
 </style>
+
+<script>
+  const methodEl = document.getElementById('a-method') as HTMLSelectElement;
+  const urlEl = document.getElementById('a-url') as HTMLInputElement;
+  const headersEl = document.getElementById('a-headers') as HTMLTextAreaElement;
+  const bodyEl = document.getElementById('a-body') as HTMLTextAreaElement;
+  const statusEl = document.getElementById('a-status') as HTMLElement;
+  const metaEl = document.getElementById('a-meta') as HTMLElement;
+  const rHeadersEl = document.getElementById('a-rheaders') as HTMLPreElement;
+  const rBodyEl = document.getElementById('a-rbody') as HTMLPreElement;
+
+  document.querySelectorAll<HTMLButtonElement>('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
+      t.classList.add('active');
+      document.getElementById(`panel-${t.dataset.tab}`)!.classList.remove('hidden');
+    });
+  });
+
+  function setStatus(msg: string, ok: boolean) {
+    statusEl.textContent = msg;
+    statusEl.className = 'status-msg ' + (ok ? 'ok' : 'err');
+  }
+  function parseHeaders(raw: string): Record<string, string> {
+    const h: Record<string, string> = {};
+    for (const line of raw.split('\n')) {
+      const m = line.match(/^\s*([^:]+):\s*(.*)$/);
+      if (m) h[m[1].trim()] = m[2].trim();
+    }
+    return h;
+  }
+
+  document.getElementById('a-send')!.addEventListener('click', async () => {
+    const url = urlEl.value.trim();
+    if (!url) { setStatus('✗ URL required', false); return; }
+    const method = methodEl.value;
+    const headers = parseHeaders(headersEl.value);
+    const hasBody = !['GET','HEAD'].includes(method) && bodyEl.value.trim();
+    const init: RequestInit = { method, headers };
+    if (hasBody) init.body = bodyEl.value;
+    setStatus('… sending', true);
+    metaEl.textContent = ''; rHeadersEl.textContent = ''; rBodyEl.textContent = '';
+    const t0 = performance.now();
+    try {
+      const res = await fetch(url, init);
+      const elapsed = Math.round(performance.now() - t0);
+      const rh: string[] = [];
+      res.headers.forEach((v, k) => rh.push(`${k}: ${v}`));
+      rHeadersEl.textContent = rh.join('\n');
+      const text = await res.text();
+      const ct = res.headers.get('content-type') || '';
+      if (ct.includes('json')) {
+        try { rBodyEl.textContent = JSON.stringify(JSON.parse(text), null, 2); }
+        catch { rBodyEl.textContent = text; }
+      } else {
+        rBodyEl.textContent = text;
+      }
+      const okCls = res.ok ? 'ok' : 'err';
+      metaEl.innerHTML = `<span class="${okCls}">${res.status} ${res.statusText}</span><span>${elapsed} ms</span><span>${text.length.toLocaleString()} bytes</span><span>${ct || '(no content-type)'}</span>`;
+      setStatus(`✓ ${res.status} in ${elapsed} ms`, res.ok);
+    } catch (e) {
+      const msg = (e as Error).message;
+      setStatus('✗ ' + msg + ' — often a CORS issue; the target must allow this origin', false);
+    }
+  });
+</script>
